@@ -1,3 +1,4 @@
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -26,14 +27,20 @@ const buildEmbedUrl = (id: string) =>
 
 type Axis = "x" | "y";
 
+const disableScrollJS = `
+  (function() {
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+  })();
+  true;
+`;
+
 export default function Index() {
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Track X and Y separately so both lines can animate together.
   const translateX = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(0)).current;
 
-  // Which axis we currently consider the "active" swipe axis (for layout + snap).
   const [axis, setAxis] = useState<Axis>("x");
   const lockedAxis = useRef<Axis | null>(null);
 
@@ -42,7 +49,7 @@ export default function Index() {
   const horizontalGap = 32;
   const verticalGap = 32;
 
-  const cardWidth = screenWidth - 32;
+  const cardWidth = screenWidth - 80;
   const cardHeight = Math.max(screenHeight * 0.55, 320);
 
   const distanceX = cardWidth + horizontalGap;
@@ -51,32 +58,12 @@ export default function Index() {
   const prevAvailable = currentIndex > 0;
   const nextAvailable = currentIndex < VIDEOS.length - 1;
 
-  // Render just current + immediate neighbours. Positioned relative to currentIndex.
   const renderIndices = useMemo(() => {
     const list: number[] = [currentIndex];
     if (prevAvailable) list.unshift(currentIndex - 1);
     if (nextAvailable) list.push(currentIndex + 1);
     return list;
   }, [currentIndex, prevAvailable, nextAvailable]);
-
-  // Horizontal line length reacts to X drag, vertical line length reacts to Y drag.
-  const hLen = translateX.interpolate({
-    inputRange: [-distanceX, 0, distanceX],
-    outputRange: [distanceX * 2, distanceX, distanceX * 2],
-    extrapolate: "clamp",
-  });
-
-  const vLen = translateY.interpolate({
-    inputRange: [-distanceY, 0, distanceY],
-    outputRange: [distanceY * 2, distanceY, distanceY * 2],
-    extrapolate: "clamp",
-  });
-
-  const resetDrag = useCallback(() => {
-    translateX.setValue(0);
-    translateY.setValue(0);
-    lockedAxis.current = null;
-  }, [translateX, translateY]);
 
   const timing = useCallback(
     (val: Animated.Value, toValue: number, onDone?: () => void) => {
@@ -100,21 +87,31 @@ export default function Index() {
     ({ nativeEvent }: PanGestureHandlerGestureEvent) => {
       const { translationX, translationY } = nativeEvent;
 
-      // Always update both so both lines can render.
-      translateX.setValue(translationX);
-      translateY.setValue(translationY);
-
       const absX = Math.abs(translationX);
       const absY = Math.abs(translationY);
 
-      // Lock axis once the user commits a bit, but also keep axis feeling responsive.
-      const slop = 6;
+      // Axis lock
+      const slop = 10;
+      const dominance = 1.2;
       if (!lockedAxis.current && (absX > slop || absY > slop)) {
-        lockedAxis.current = absX >= absY ? "x" : "y";
-        setAxis(lockedAxis.current);
+        if (absX > absY * dominance) lockedAxis.current = "x";
+        else if (absY > absX * dominance) lockedAxis.current = "y";
+        if (lockedAxis.current) setAxis(lockedAxis.current);
       } else if (!lockedAxis.current) {
-        // Before lock, keep axis aligned to dominant direction to avoid "wrong line/position" flashes.
         setAxis(absX >= absY ? "x" : "y");
+      }
+
+      // Apply movement (kill off-axis when locked)
+      const locked = lockedAxis.current;
+      if (locked === "x") {
+        translateX.setValue(translationX);
+        translateY.setValue(0);
+      } else if (locked === "y") {
+        translateX.setValue(0);
+        translateY.setValue(translationY);
+      } else {
+        translateX.setValue(translationX);
+        translateY.setValue(translationY);
       }
     },
     [translateX, translateY]
@@ -143,26 +140,24 @@ export default function Index() {
       const primary = activeAxis === "x" ? translateX : translateY;
       const secondary = activeAxis === "x" ? translateY : translateX;
 
-      // Secondary axis should always settle back.
       springToZero(secondary);
 
       if (swipeNext) {
         timing(primary, -distance, () => {
           setCurrentIndex((i) => Math.min(i + 1, VIDEOS.length - 1));
-          primary.setValue(0);
-          secondary.setValue(0);
+          translateX.setValue(0);
+          translateY.setValue(0);
           lockedAxis.current = null;
         });
       } else if (swipePrev) {
         timing(primary, distance, () => {
           setCurrentIndex((i) => Math.max(i - 1, 0));
-          primary.setValue(0);
-          secondary.setValue(0);
+          translateX.setValue(0);
+          translateY.setValue(0);
           lockedAxis.current = null;
         });
       } else {
         springToZero(primary);
-        // Keep whichever was locked cleared.
         lockedAxis.current = null;
       }
     },
@@ -177,123 +172,200 @@ export default function Index() {
     ]
   );
 
-  const stageTransform =
-    axis === "x"
-      ? [{ translateX }, { translateY: new Animated.Value(0) }]
-      : [{ translateX: new Animated.Value(0) }, { translateY }];
+  // Outer frame will move with this transform
+  const stageTransform = [{ translateX }, { translateY }];
+
+  const outerWidth = cardWidth + horizontalGap * 2;
+  const outerHeight = cardHeight + verticalGap * 2;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <PanGestureHandler onGestureEvent={handleGestureEvent} onEnded={handleGestureEnd}>
         <SafeAreaView style={{ flex: 1, backgroundColor: "#0b0d12" }}>
-          <View style={{ flex: 1, padding: 16, gap: 12 }}>
+          <View style={{ flex: 1, padding: 16 }}>
             <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-              {/* Stage is one-card size. Neighbours live off-screen at +/-distance. */}
+              {/* OUTER BOX NOW MOVES (frame + arrows + inner stack all move together) */}
               <Animated.View
                 style={{
-                  width: cardWidth,
-                  height: cardHeight,
+                  width: outerWidth,
+                  height: outerHeight,
                   position: "relative",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 20,
+                  borderWidth: 1,
+                  padding: 12,
+                  overflow: "visible", // keep arrows visible in gap
                   transform: stageTransform,
                 }}
               >
-                {renderIndices.map((i) => {
-                  const video = VIDEOS[i];
-                  const delta = i - currentIndex;
+                {/* Card stack container (does NOT have the transform now) */}
+                <View
+                  style={{
+                    width: cardWidth,
+                    height: cardHeight,
+                    position: "relative",
+                  }}
+                >
+                  {renderIndices.map((i) => {
+                    const video = VIDEOS[i];
+                    const delta = i - currentIndex;
 
-                  const left = axis === "x" ? delta * distanceX : 0;
-                  const top = axis === "y" ? delta * distanceY : 0;
+                    const left = axis === "x" ? delta * distanceX : 0;
+                    const top = axis === "y" ? delta * distanceY : 0;
 
-                  return (
-                    <View
-                      key={video.id}
-                      style={{
-                        position: "absolute",
-                        left,
-                        top,
-                        width: cardWidth,
-                        height: cardHeight,
-                        borderRadius: 16,
-                        overflow: "hidden",
-                        backgroundColor: "#111827",
-                        borderWidth: 1,
-                        borderColor: "#f97316",
-                      }}
-                    >
-                      <View style={{ flex: 1 }}>
-                        <WebView
-                          source={{ uri: buildEmbedUrl(video.id) }}
-                          allowsFullscreenVideo
-                          allowsInlineMediaPlayback
-                          startInLoadingState
-                          renderLoading={() => (
-                            <View
-                              style={{
-                                flex: 1,
-                                alignItems: "center",
-                                justifyContent: "center",
-                                backgroundColor: "#111827",
-                              }}
-                            >
-                              <ActivityIndicator size="large" color="#f97316" />
-                            </View>
-                          )}
-                          style={{ flex: 1 }}
-                        />
-                      </View>
-
+                    return (
                       <View
+                        key={video.id}
                         style={{
-                          padding: 12,
-                          borderTopWidth: 1,
-                          borderTopColor: "rgba(249,115,22,0.35)",
-                          backgroundColor: "#0f172a",
-                          gap: 4,
+                          position: "absolute",
+                          left,
+                          top,
+                          width: cardWidth,
+                          height: cardHeight,
+                          zIndex: 1,
+                          borderRadius: 16,
+                          overflow: "hidden",
+                          backgroundColor: "#111827",
+                          borderWidth: 1,
+                          borderColor: "#f97316",
                         }}
                       >
-                        <Text
-                          style={{ color: "#f8fafc", fontSize: 18, fontWeight: "700" }}
-                          numberOfLines={1}
-                        >
-                          {video.title}
-                        </Text>
-                        <Text style={{ color: "#94a3b8" }}>
-                          Video {i + 1} of {VIDEOS.length} - swipe to change
-                        </Text>
-                      </View>
-                    </View>
-                  );
-                })}
+                        <View style={{ flex: 1 }}>
+                          <WebView
+                            source={{ uri: buildEmbedUrl(video.id) }}
+                            allowsFullscreenVideo
+                            allowsInlineMediaPlayback
+                            startInLoadingState
+                            androidLayerType="software"
+                            injectedJavaScript={disableScrollJS}
+                            scrollEnabled={false}
+                            bounces={false}
+                            showsVerticalScrollIndicator={false}
+                            showsHorizontalScrollIndicator={false}
+                            renderToHardwareTextureAndroid={false}
+                            renderLoading={() => (
+                              <View
+                                style={{
+                                  flex: 1,
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  backgroundColor: "#111827",
+                                }}
+                              >
+                                <ActivityIndicator size="large" color="#f97316" />
+                              </View>
+                            )}
+                            style={{ flex: 1 }}
+                          />
+                        </View>
 
-                {/* Crosshair connector lines (both at once). */}
+                        <View
+                          style={{
+                            padding: 16,
+                            borderTopWidth: 1,
+                            borderTopColor: "rgba(249,115,22,0.35)",
+                            backgroundColor: "#0f172a",
+                            gap: 8,
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: "#f8fafc",
+                              fontSize: 20,
+                              fontWeight: "700",
+                            }}
+                            numberOfLines={2}
+                          >
+                            {video.title}
+                          </Text>
+                          <Text style={{ color: "#94a3b8", fontSize: 16 }}>
+                            Video {i + 1} of {VIDEOS.length} - swipe to change
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                {/* Arrows are inside the OUTER box, so they move with it too */}
                 {VIDEOS.length > 1 && (
                   <>
-                    <Animated.View
-                      pointerEvents="none"
-                      style={{
-                        position: "absolute",
-                        zIndex: -1,
-                        left: cardWidth / 2 - 2,
-                        top: cardHeight / 2 - 2,
-                        width: hLen,
-                        height: 4,
-                        backgroundColor: "rgba(148,163,184,0.5)",
-                        transform: [{ translateX: Animated.multiply(hLen, -0.5) }],
-                      }}
-                    />
-                    <Animated.View
-                      pointerEvents="none"
-                      style={{
-                        position: "absolute",
-                        zIndex: -1,
-                        left: cardWidth / 2 - 2,
-                        top: cardHeight / 2 - 2,
-                        width: 4,
-                        height: vLen,
-                        backgroundColor: "rgba(148,163,184,0.5)",
-                        transform: [{ translateY: Animated.multiply(vLen, -0.5) }],
-                      }}
-                    />
+                    {/* Horizontal arrows */}
+                    {nextAvailable && (
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: "absolute",
+                          zIndex: 50,
+                          elevation: 50,
+                          right: 4,
+                          top: outerHeight / 2 - 12,
+                        }}
+                      >
+                        <MaterialIcons
+                          name="arrow-forward-ios"
+                          size={24}
+                          color="rgba(148,163,184,0.8)"
+                        />
+                      </View>
+                    )}
+                    {prevAvailable && (
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: "absolute",
+                          zIndex: 50,
+                          elevation: 50,
+                          left: 4,
+                          top: outerHeight / 2 - 12,
+                        }}
+                      >
+                        <MaterialIcons
+                          name="arrow-back-ios"
+                          size={24}
+                          color="rgba(148,163,184,0.8)"
+                        />
+                      </View>
+                    )}
+
+                    {/* Vertical arrows */}
+                    {nextAvailable && (
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: "absolute",
+                          zIndex: 50,
+                          elevation: 50,
+                          left: outerWidth / 2 - 12,
+                          bottom: 4,
+                        }}
+                      >
+                        <MaterialIcons
+                          name="arrow-downward"
+                          size={24}
+                          color="rgba(148,163,184,0.8)"
+                        />
+                      </View>
+                    )}
+                    {prevAvailable && (
+                      <View
+                        pointerEvents="none"
+                        style={{
+                          position: "absolute",
+                          zIndex: 50,
+                          elevation: 50,
+                          left: outerWidth / 2 - 12,
+                          top: 4,
+                        }}
+                      >
+                        <MaterialIcons
+                          name="arrow-upward"
+                          size={24}
+                          color="rgba(148,163,184,0.8)"
+                        />
+                      </View>
+                    )}
                   </>
                 )}
               </Animated.View>
