@@ -19,10 +19,6 @@ export type Node = {
 }
 
 const ROOT_ID = "root"
-const DEFAULT_MOVE_ID = "stage1_double_leg"
-
-const rootMove = bjjData.nodes.find((node) => node.id === DEFAULT_MOVE_ID) ?? bjjData.nodes[0]
-
 const buildEmbedUrl = (id: string) => `https://www.youtube.com/embed/${id}?rel=0&playsinline=1`
 
 const extractYouTubeId = (raw?: string | null) => {
@@ -51,13 +47,13 @@ const buildVideoUrl = (moveId?: string | null) => {
 const INITIAL_NODES: Record<string, Node> = {
   [ROOT_ID]: {
     id: ROOT_ID,
-    moveId: rootMove?.id,
-    title: rootMove?.name ?? "Technique",
-    videoUrl: buildVideoUrl(rootMove?.id) ?? undefined,
-    group: rootMove?.group,
-    type: rootMove?.type,
-    stage: rootMove?.stage,
-    notes: rootMove?.notes_md,
+    moveId: undefined,
+    title: "Start Here",
+    videoUrl: undefined,
+    group: undefined,
+    type: undefined,
+    stage: undefined,
+    notes: undefined,
   },
 }
 
