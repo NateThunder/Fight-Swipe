@@ -309,9 +309,9 @@ export default function Index() {
     return list
   }, [currentId, distanceX, distanceY, getNeighborId])
 
-  const openMoveMenu = (dir: "right" | "down") => {
+  const openMoveMenu = (dir?: "right" | "down") => {
     if (isTerminal) return
-    setMenuDirection(dir)
+    setMenuDirection(dir ?? null)
     setMenuParentId(currentId)
     setMenuVisible(true)
   }
@@ -351,7 +351,41 @@ export default function Index() {
   )
 
   const handleMovePicked = (move: BJJNode) => {
-    if (!menuDirection || !menuParentId) return
+    if (!menuParentId) return
+
+    if (!menuDirection) {
+      setNodes((prev) =>
+        Object.fromEntries(
+          Object.entries(prev).map(([id, node]) =>
+            id === menuParentId
+              ? [
+                  id,
+                  {
+                    ...node,
+                    moveId: move.id,
+                    title: move.name,
+                    videoUrl: buildVideoUrl(move.id) ?? undefined,
+                    group: move.group,
+                    type: move.type,
+                    stage: move.stage,
+                    notes: move.notes_md,
+                  },
+                ]
+              : [id, node],
+          ),
+        ),
+      )
+      setPlayingIds((prev) => {
+        const next = { ...prev }
+        delete next[menuParentId]
+        return next
+      })
+      setMenuVisible(false)
+      setMenuDirection(null)
+      setMenuParentId(null)
+      return
+    }
+
     attachMoveToDirection(move, menuDirection, menuParentId)
     setMenuVisible(false)
     setMenuDirection(null)
@@ -506,6 +540,33 @@ export default function Index() {
                 }}
               >
                 <View style={{ width: cardWidth, height: cardHeight, position: "relative" }}>
+                  {!nodes[currentId]?.moveId && Object.keys(nodes).length === 1 && (
+                    <Pressable
+                      onPress={() => openMoveMenu()}
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        top: 0,
+                        width: cardWidth,
+                        height: cardHeight,
+                        borderRadius: 16,
+                        borderWidth: 1.5,
+                        borderStyle: "dashed",
+                        borderColor: "#f97316",
+                        backgroundColor: "rgba(249,115,22,0.08)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        zIndex: 5,
+                      }}
+                    >
+                      <Text style={{ color: "#f97316", fontWeight: "800", marginBottom: 6 }}>
+                        Start Here
+                      </Text>
+                      <Text style={{ color: "rgba(249,115,22,0.9)", fontSize: 12, textAlign: "center", paddingHorizontal: 12 }}>
+                        Pick your first move to open the menu.
+                      </Text>
+                    </Pressable>
+                  )}
                   {visibleCards.map(({ id, offsetX, offsetY }) => {
                     const node = nodes[id]
                     if (!node) return null

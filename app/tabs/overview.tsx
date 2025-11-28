@@ -2,7 +2,14 @@ import { useMemo, useRef } from "react"
 import { Animated, Pressable, Text, View } from "react-native"
 import { useRouter } from "expo-router"
 import Svg, { Line } from "react-native-svg"
-import { GestureHandlerRootView, PanGestureHandler } from "react-native-gesture-handler"
+import {
+  GestureHandlerRootView,
+  PanGestureHandler,
+  PinchGestureHandler,
+  State,
+  type PanGestureHandlerGestureEvent,
+  type PinchGestureHandlerGestureEvent,
+} from "react-native-gesture-handler"
 import { useFlow } from "../FlowStore"
 
 type Dir = "left" | "right" | "up" | "down"
@@ -96,6 +103,11 @@ export default function Overview() {
 
   const panX = useRef(new Animated.Value(0)).current
   const panY = useRef(new Animated.Value(0)).current
+  const baseScale = useRef(new Animated.Value(1)).current
+  const pinchScale = useRef(new Animated.Value(1)).current
+  const scale = Animated.multiply(baseScale, pinchScale)
+  const lastPan = useRef({ x: 0, y: 0 })
+  const lastScale = useRef(1)
 
   const { positioned, edges, canvasW, canvasH, nodeW, nodeH } = useMemo(() => {
     const nodeW = 150
@@ -136,6 +148,44 @@ export default function Overview() {
     return { positioned, edges, canvasW, canvasH, nodeW, nodeH }
   }, [nodes, rootId])
 
+  const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
+
+  const onPanGestureEvent = Animated.event<PanGestureHandlerGestureEvent["nativeEvent"]>(
+    [{ nativeEvent: { translationX: panX, translationY: panY } }],
+    { useNativeDriver: true },
+  )
+
+  const onPanStateChange = ({ nativeEvent }: PanGestureHandlerGestureEvent) => {
+    if (nativeEvent.state === State.BEGAN) {
+      panX.setOffset(lastPan.current.x)
+      panY.setOffset(lastPan.current.y)
+      panX.setValue(0)
+      panY.setValue(0)
+    }
+    if (nativeEvent.state === State.END || nativeEvent.state === State.CANCELLED) {
+      lastPan.current = {
+        x: lastPan.current.x + nativeEvent.translationX,
+        y: lastPan.current.y + nativeEvent.translationY,
+      }
+      panX.flattenOffset()
+      panY.flattenOffset()
+    }
+  }
+
+  const onPinchGestureEvent = Animated.event<PinchGestureHandlerGestureEvent["nativeEvent"]>(
+    [{ nativeEvent: { scale: pinchScale } }],
+    { useNativeDriver: true },
+  )
+
+  const onPinchStateChange = ({ nativeEvent }: PinchGestureHandlerGestureEvent) => {
+    if (nativeEvent.state === State.END || nativeEvent.state === State.CANCELLED) {
+      const next = clamp(lastScale.current * nativeEvent.scale, 0.6, 2.5)
+      lastScale.current = next
+      baseScale.setValue(next)
+      pinchScale.setValue(1)
+    }
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#0b0d12" }}>
       <View style={{ padding: 16 }}>
@@ -143,83 +193,92 @@ export default function Overview() {
         <Text style={{ color: "#94a3b8", marginTop: 6 }}>Tap a node to jump back into the flow.</Text>
       </View>
 
-      <PanGestureHandler
-        onGestureEvent={({ nativeEvent }) => {
-          panX.setValue(nativeEvent.translationX)
-          panY.setValue(nativeEvent.translationY)
-        }}
-        onEnded={() => {
-          Animated.spring(panX, { toValue: 0, useNativeDriver: true }).start()
-          Animated.spring(panY, { toValue: 0, useNativeDriver: true }).start()
-        }}
+      <PinchGestureHandler
+        onGestureEvent={onPinchGestureEvent}
+        onHandlerStateChange={onPinchStateChange}
       >
-        <Animated.View style={{ flex: 1, transform: [{ translateX: panX }, { translateY: panY }] }}>
-          <View style={{ width: canvasW, height: canvasH }}>
-            <Svg width={canvasW} height={canvasH} style={{ position: "absolute", left: 0, top: 0 }}>
-              {edges.map((e, idx) => {
-                const a = positioned[e.from]
-                const b = positioned[e.to]
-                if (!a || !b) return null
-                const x1 = a.x + nodeW / 2
-                const y1 = a.y + nodeH / 2
-                const x2 = b.x + nodeW / 2
-                const y2 = b.y + nodeH / 2
-                return (
-                  <Line
-                    key={`${e.from}-${e.to}-${idx}`}
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke="rgba(248,250,252,0.35)"
-                    strokeWidth={3}
-                  />
-                )
-              })}
-            </Svg>
+        <Animated.View style={{ flex: 1 }}>
+          <PanGestureHandler
+            onGestureEvent={onPanGestureEvent}
+            onHandlerStateChange={onPanStateChange}
+            minPointers={1}
+            maxPointers={2}
+          >
+            <Animated.View style={{ flex: 1 }}>
+              <Animated.View
+                style={{
+                  transform: [{ translateX: panX }, { translateY: panY }, { scale }],
+                }}
+              >
+                <View style={{ width: canvasW, height: canvasH }}>
+                  <Svg width={canvasW} height={canvasH} style={{ position: "absolute", left: 0, top: 0 }}>
+                    {edges.map((e, idx) => {
+                      const a = positioned[e.from]
+                      const b = positioned[e.to]
+                      if (!a || !b) return null
+                      const x1 = a.x + nodeW / 2
+                      const y1 = a.y + nodeH / 2
+                      const x2 = b.x + nodeW / 2
+                      const y2 = b.y + nodeH / 2
+                      return (
+                        <Line
+                          key={`${e.from}-${e.to}-${idx}`}
+                          x1={x1}
+                          y1={y1}
+                          x2={x2}
+                          y2={y2}
+                          stroke="rgba(248,250,252,0.35)"
+                          strokeWidth={3}
+                        />
+                      )
+                    })}
+                  </Svg>
 
-            {Object.keys(positioned).map((id) => {
-              const p = positioned[id]
-              const n = nodes[id]
-              if (!n) return null
+                  {Object.keys(positioned).map((id) => {
+                    const p = positioned[id]
+                    const n = nodes[id]
+                    if (!n) return null
 
-              const isCurrent = id === currentId
-              const isTerminal = n.type === "Submission" || n.stage === 4
+                    const isCurrent = id === currentId
+                    const isTerminal = n.type === "Submission" || n.stage === 4
 
-              return (
-                <Pressable
-                  key={id}
-                  onPress={() => {
-                    setCurrentId(id)
-                    router.push("/tabs")
-                  }}
-                  style={{
-                    position: "absolute",
-                    left: p.x,
-                    top: p.y,
-                    width: nodeW,
-                    height: nodeH,
-                    borderRadius: 16,
-                    padding: 10,
-                    justifyContent: "center",
-                    backgroundColor: "#111827",
-                    borderWidth: 2,
-                    borderColor: isCurrent ? "#f97316" : "rgba(255,255,255,0.12)",
-                    opacity: isTerminal ? 0.9 : 1,
-                  }}
-                >
-                  <Text style={{ color: "#f8fafc", fontWeight: "800" }} numberOfLines={2}>
-                    {n.title}
-                  </Text>
-                  <Text style={{ color: "#94a3b8", marginTop: 6, fontSize: 12 }} numberOfLines={1}>
-                    {n.type ?? "Unknown"} {n.stage ? `• Stage ${n.stage}` : ""}
-                  </Text>
-                </Pressable>
-              )
-            })}
-          </View>
+                    return (
+                      <Pressable
+                        key={id}
+                        onPress={() => {
+                          setCurrentId(id)
+                          router.push("/tabs")
+                        }}
+                        style={{
+                          position: "absolute",
+                          left: p.x,
+                          top: p.y,
+                          width: nodeW,
+                          height: nodeH,
+                          borderRadius: 16,
+                          padding: 10,
+                          justifyContent: "center",
+                          backgroundColor: "#111827",
+                          borderWidth: 2,
+                          borderColor: isCurrent ? "#f97316" : "rgba(255,255,255,0.12)",
+                          opacity: isTerminal ? 0.9 : 1,
+                        }}
+                      >
+                        <Text style={{ color: "#f8fafc", fontWeight: "800" }} numberOfLines={2}>
+                          {n.title}
+                        </Text>
+                        <Text style={{ color: "#94a3b8", marginTop: 6, fontSize: 12 }} numberOfLines={1}>
+                          {n.type ?? "Unknown"} {n.stage ? `• Stage ${n.stage}` : ""}
+                        </Text>
+                      </Pressable>
+                    )
+                  })}
+                </View>
+              </Animated.View>
+            </Animated.View>
+          </PanGestureHandler>
         </Animated.View>
-      </PanGestureHandler>
+      </PinchGestureHandler>
     </GestureHandlerRootView>
   )
 }
