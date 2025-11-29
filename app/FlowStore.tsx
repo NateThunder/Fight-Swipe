@@ -63,6 +63,8 @@ type FlowContextValue = {
   currentId: string
   setCurrentId: React.Dispatch<React.SetStateAction<string>>
   rootId: string
+  showLobby: boolean
+  setShowLobby: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 const FlowContext = createContext<FlowContextValue | null>(null)
@@ -70,10 +72,11 @@ const FlowContext = createContext<FlowContextValue | null>(null)
 export function FlowProvider({ children }: { children: React.ReactNode }) {
   const [nodes, setNodes] = useState<Record<string, Node>>(INITIAL_NODES)
   const [currentId, setCurrentId] = useState(ROOT_ID)
+  const [showLobby, setShowLobby] = useState(true)
 
   const value = useMemo(
-    () => ({ nodes, setNodes, currentId, setCurrentId, rootId: ROOT_ID }),
-    [nodes, currentId],
+    () => ({ nodes, setNodes, currentId, setCurrentId, rootId: ROOT_ID, showLobby, setShowLobby }),
+    [nodes, currentId, showLobby],
   )
 
   return <FlowContext.Provider value={value}>{children}</FlowContext.Provider>
