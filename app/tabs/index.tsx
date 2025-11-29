@@ -848,6 +848,8 @@ export default function Index() {
                     </View>
                   ) : isTerminal ? (
                     <View pointerEvents="none" style={{ width: 34, height: 34 }} />
+                  ) : !currentNode?.moveId && Object.keys(nodes).length === 1 ? (
+                    <View pointerEvents="none" style={{ width: 34, height: 34 }} />
                   ) : (
                     <Pressable
                       onPress={() => openMoveMenu("right")}
@@ -887,6 +889,8 @@ export default function Index() {
                       <MaterialIcons name="arrow-downward" size={24} color="rgba(148,163,184,0.85)" />
                     </View>
                   ) : isTerminal ? (
+                    <View pointerEvents="none" style={{ width: 32, height: 32 }} />
+                  ) : !currentNode?.moveId && Object.keys(nodes).length === 1 ? (
                     <View pointerEvents="none" style={{ width: 32, height: 32 }} />
                   ) : (
                     <Pressable
