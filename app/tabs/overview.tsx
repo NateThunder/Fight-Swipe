@@ -166,7 +166,7 @@ export default function Overview() {
     const rootPos = positioned[rootId]
     if (!rootPos) return
     const { width: vw, height: vh } = Dimensions.get("window")
-    const extraDown = insets.top + 120
+    const extraDown = insets.top - 120
     const centerX = vw / 2 - (rootPos.x + nodeW / 2)
     const centerY = (vh / 2 + extraDown) - (rootPos.y + nodeH / 2)
 
