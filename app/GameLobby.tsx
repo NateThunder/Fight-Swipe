@@ -1,11 +1,25 @@
-import React, { FC, useMemo } from "react"
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
+import React, { FC, useMemo, useRef, useState, useCallback } from "react"
+import { Animated, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native"
+import { GestureHandlerRootView, Swipeable } from "react-native-gesture-handler"
+import {
+  Button,
+  Card,
+  Dialog,
+  HelperText,
+  IconButton,
+  Portal,
+  Text,
+  TextInput,
+  useTheme,
+} from "react-native-paper"
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
 import type { GameSave } from "./gameSaves"
 import type { BJJNode, StageId } from "./BjjData"
 
 interface GameLobbyProps {
+  // Rename these upstream if you want, but it’s not required.
   saves: GameSave[]
-  onCreateSave: () => void
+  onCreateSave: (name: string) => void
   onOpenSave: (id: string) => void
   onDeleteSave: (id: string) => void
   baseNodeLookup: Record<string, BJJNode>
@@ -18,224 +32,331 @@ const stageColors: Record<StageId, string> = {
   1: "#ededed",
   2: "#4f82ff",
   3: "#a855f7",
-  4: "#d97706",
+  4: "#75430bff",
 }
 
-const getStageColor = (stage: StageId | null) => (stage && stageOrder.includes(stage) ? stageColors[stage] : null)
+const getStageColor = (stage: StageId | null) =>
+  stage && stageOrder.includes(stage) ? stageColors[stage] : null
 
 const GameLobby: FC<GameLobbyProps> = ({
   saves,
-  onCreateSave,
-  onOpenSave,
-  onDeleteSave,
+  onCreateSave = () => {},
+  onOpenSave = () => {},
+  onDeleteSave = () => {},
   baseNodeLookup,
   onBack,
 }) => {
+  const theme = useTheme()
+  const { width } = useWindowDimensions()
+
   const safeSaves = Array.isArray(saves) ? saves : []
   const safeLookup = baseNodeLookup ?? {}
 
+  const columns = 1
+  const gap = 14
+  const padding = 16
+
+  const cardWidth = useMemo(() => {
+    const available = width - padding * 2 - gap * (columns - 1)
+    return Math.floor(available / columns)
+  }, [width, columns])
+
+  const [nameDialogOpen, setNameDialogOpen] = useState(false)
+  const [newChartName, setNewChartName] = useState("")
+  const [nameError, setNameError] = useState("")
+
+  // Optional but nice: close the swipe row before deleting, to avoid stuck-open UI.
+  const swipeableRefs = useRef<Record<string, Swipeable | null>>({})
+
   const buildPreviewStages = (save: GameSave) => {
-    const stages = save.nodes
+    const stages = Object.values(save.nodes ?? {})
       .map((node) => (node.moveId ? safeLookup[node.moveId]?.stage ?? null : null))
       .filter((stage): stage is StageId => stage !== null)
       .slice(0, 6)
 
-    if (stages.length === 0) {
-      return [null, null, null]
-    }
+    return stages.length === 0 ? [null, null, null] : stages
+  }
 
-    return stages
+  const openNameDialog = () => {
+    setNewChartName("")
+    setNameError("")
+    setNameDialogOpen(true)
+  }
+
+  const closeNameDialog = () => {
+    setNameDialogOpen(false)
+    setNameError("")
+  }
+
+  const submitCreate = () => {
+    const trimmed = newChartName.trim()
+    if (!trimmed) {
+      setNameError("Flow chart name is required.")
+      return
+    }
+    closeNameDialog()
+    onCreateSave(trimmed)
+  }
+
+  const handleDeleteChart = useCallback(
+    (id: string) => {
+      swipeableRefs.current[id]?.close()
+      delete swipeableRefs.current[id]
+      onDeleteSave(id)
+    },
+    [onDeleteSave]
+  )
+
+  const renderDeleteAction = (
+    id: string,
+    _progress?: Animated.AnimatedInterpolation<number>,
+    dragX?: Animated.AnimatedInterpolation<number>,
+  ) => {
+    const bg = dragX
+      ? dragX.interpolate({
+          inputRange: [-120, 0],
+          outputRange: ["rgba(239,68,68,1)", "rgba(239,68,68,0)"],
+          extrapolate: "clamp",
+        })
+      : "rgba(239,68,68,0)"
+
+    const opacity = dragX
+      ? dragX.interpolate({
+          inputRange: [-60, -10],
+          outputRange: [1, 0],
+          extrapolate: "clamp",
+        })
+      : 0
+
+    return (
+      <Animated.View
+        style={[
+          styles.swipeActionWrapRight,
+          {
+            backgroundColor: bg,
+            opacity,
+          },
+        ]}
+      >
+        <Button
+          mode="contained"
+          buttonColor="rgba(0,0,0,0)"
+          textColor="#000"
+          onPress={() => handleDeleteChart(id)}
+          contentStyle={{ flexDirection: "row", alignItems: "center", justifyContent: "flex-end" }}
+        >
+          <MaterialCommunityIcons name="delete-forever-outline" size={28} color="#000" />
+        </Button>
+      </Animated.View>
+    )
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerActions}>{onBack ? (
-          <Pressable style={styles.backButton} onPress={onBack}>
-            <Text style={styles.backButtonText}>{"\u2190"} Back</Text>
-          </Pressable>
-        ) : null}</View>
-        <Text style={styles.eyebrow}>Saved Flows</Text>
-        <Text style={styles.title}>Choose a Training Map</Text>
-        <Text style={styles.copy}>Jump back into a flow you were building or spin up a fresh plan for today&apos;s session.</Text>
-      </View>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.colors.background }}>
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.container,
+            {
+              backgroundColor: theme.colors.background,
+              padding,
+              alignItems: "stretch",
+              width: "100%",
+              paddingBottom: 0,
+            },
+          ]}
+          style={{ flex: 1, backgroundColor: theme.colors.background }}
+        >
+        <View style={styles.header}>
+          <Text
+            variant="labelSmall"
+            style={{
+              color: theme.colors.onSurfaceVariant,
+              letterSpacing: 1,
+              textTransform: "uppercase",
+              textAlign: "center",
+            }}
+          >
+            Saved Flow Charts
+          </Text>
 
-      <View style={styles.grid}>
-        <View style={styles.cardWrapper}>
-          <Pressable style={[styles.card, styles.cardCreate]} onPress={onCreateSave}>
-            <View style={[styles.preview, styles.previewCreate]}>
-              <Text style={styles.plus}>+</Text>
-            </View>
-          </Pressable>
-          <Text style={styles.cardLabel}>Create New Flow</Text>
-          <Text style={styles.cardHint}>Start a fresh roadmap</Text>
+          <Text variant="headlineSmall" style={{ fontWeight: "800", textAlign: "center" }}>
+            Choose a Flow Chart
+          </Text>
+
+          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, textAlign: "center" }}>
+            Tip: swipe a card left to delete.
+          </Text>
         </View>
 
-        {safeSaves.map((save) => {
-          const stages = buildPreviewStages(save)
-          const updatedLabel = useMemo(() => new Date(save.updatedAt).toLocaleString(), [save.updatedAt])
+          <View style={[styles.grid, { gap }]}>
+            {safeSaves.map((save) => {
+              const stages = buildPreviewStages(save)
+              const updatedLabel = new Date(save.updatedAt).toLocaleString()
 
-          return (
-            <View style={styles.cardWrapper} key={save.id}>
-              <Pressable
-                style={styles.deleteButton}
-                onPress={(event) => {
-                  event.stopPropagation()
-                  onDeleteSave(save.id)
-                }}
-              >
-                <Text style={styles.deleteButtonText}>Delete</Text>
-              </Pressable>
-              <Pressable style={styles.card} onPress={() => onOpenSave(save.id)}>
-                <View style={styles.preview}>
-                  {stages.map((stage, idx) => {
-                    const bg = getStageColor(stage)
-                    return (
-                      <View
-                        key={`${save.id}-${idx}`}
-                        style={[
-                          styles.previewNode,
-                          bg ? { backgroundColor: bg, borderColor: bg } : styles.previewEmpty,
-                        ]}
-                      />
-                    )
-                  })}
+              return (
+                <View key={save.id} style={{ width: "100%" }}>
+                  <Swipeable
+                    ref={(ref) => {
+                      swipeableRefs.current[save.id] = ref
+                    }}
+                    renderRightActions={(progress, dragX) => renderDeleteAction(save.id, progress, dragX)}
+                    rightThreshold={20}
+                    overshootRight={false}
+                    onSwipeableOpen={() => handleDeleteChart(save.id)}
+                  >
+                    <Card
+                      mode="outlined"
+                      style={[styles.card, { borderColor: theme.colors.outlineVariant }]}
+                      onPress={() => onOpenSave(save.id)}
+                    >
+                      <Card.Content style={{ gap: 12 }}>
+                        <View
+                          style={[
+                            styles.previewRow,
+                            { backgroundColor: theme.colors.surfaceVariant },
+                          ]}
+                        >
+                          {stages.map((stage, idx) => {
+                            const bg = getStageColor(stage)
+                            return (
+                              <View
+                                key={`${save.id}-${idx}`}
+                                style={[
+                                  styles.previewNode,
+                                  {
+                                    backgroundColor: bg ?? theme.colors.surface,
+                                    borderColor: bg ?? theme.colors.outlineVariant,
+                                    opacity: bg ? 1 : 0.35,
+                                  },
+                                ]}
+                              />
+                            )
+                          })}
+                        </View>
+
+                        <View style={{ gap: 2 }}>
+                          <Text variant="titleMedium" numberOfLines={1} style={{ fontWeight: "700" }}>
+                            {save.name}
+                          </Text>
+                          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                            Updated {updatedLabel}
+                          </Text>
+                        </View>
+
+                        <Button mode="contained" onPress={() => onOpenSave(save.id)}>
+                          Open
+                        </Button>
+                      </Card.Content>
+                    </Card>
+                  </Swipeable>
                 </View>
-              </Pressable>
-              <Text style={styles.cardLabel}>{save.name}</Text>
-              <Text style={styles.cardHint}>Updated {updatedLabel}</Text>
-            </View>
-          )
-        })}
+              )
+            })}
+          </View>
+        </ScrollView>
+
+        <View
+          style={{
+            alignItems: "center",
+            paddingTop: 4,
+            paddingBottom: 16,
+            backgroundColor: theme.colors.background,
+          }}
+        >
+          <IconButton
+            icon="plus"
+            size={20}
+            onPress={openNameDialog}
+            style={{
+              backgroundColor: theme.colors.surfaceVariant,
+              borderRadius: 999,
+              width: 36,
+              height: 36,
+              justifyContent: "center",
+              alignItems: "center",
+            }}
+          />
+          <Text variant="bodySmall" style={{ fontWeight: "600", marginTop: 2 }}>
+            Create New Flow Chart
+          </Text>
+        </View>
       </View>
-    </ScrollView>
+
+      <Portal>
+        <Dialog visible={nameDialogOpen} onDismiss={closeNameDialog}>
+          <Dialog.Title>Name your flow chart</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Flow chart name"
+              mode="outlined"
+              value={newChartName}
+              onChangeText={(t) => {
+                setNewChartName(t)
+                if (nameError) setNameError("")
+              }}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={submitCreate}
+            />
+            <HelperText type="error" visible={!!nameError}>
+              {nameError}
+            </HelperText>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={closeNameDialog}>Cancel</Button>
+            <Button mode="contained" onPress={submitCreate}>
+              Create
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </GestureHandlerRootView>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 24,
-    gap: 20,
-    backgroundColor: "rgba(11, 11, 11, 0.92)",
+    gap: 16,
+    paddingBottom: 24,
   },
   header: {
-    gap: 4,
-  },
-  headerActions: {
+    gap: 6,
     marginBottom: 6,
-  },
-  backButton: {
-    alignSelf: "flex-start",
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    backgroundColor: "rgba(255,255,255,0.05)",
-  },
-  backButtonText: {
-    color: "#f5f5f5",
-    fontWeight: "600",
-  },
-  eyebrow: {
-    color: "#f5f5f5",
-    fontSize: 12,
-    letterSpacing: 0.12,
-    textTransform: "uppercase",
-  },
-  title: {
-    color: "#f5f5f5",
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  copy: {
-    color: "rgba(255,255,255,0.75)",
-    marginTop: 2,
+    alignItems: "center",
   },
   grid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 18,
-  },
-  cardWrapper: {
-    width: 220,
-    alignItems: "center",
-    gap: 6,
-    position: "relative",
-  },
-  deleteButton: {
-    position: "absolute",
-    top: -22,
-    left: "50%",
-    transform: [{ translateX: -50 }],
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(255,71,71,0.5)",
-    backgroundColor: "rgba(255,56,56,0.08)",
-  },
-  deleteButtonText: {
-    color: "#ff7b7b",
-    fontSize: 12,
-    letterSpacing: 0.6,
+    flexDirection: "column",
   },
   card: {
-    width: "100%",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: 18,
-    padding: 16,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    gap: 12,
+    borderRadius: 14,
+    overflow: "hidden",
   },
-  cardCreate: {
+  createRow: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    borderStyle: "dashed",
-    borderColor: "rgba(255,255,255,0.3)",
-    backgroundColor: "rgba(255,255,255,0.05)",
+    gap: 8,
+    marginLeft: -8,
   },
-  preview: {
+  previewRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 14,
-    backgroundColor: "rgba(255,255,255,0.03)",
-  },
-  previewCreate: {
-    justifyContent: "center",
-    width: 44,
-    height: 22,
+    paddingHorizontal: 12,
+    borderRadius: 12,
   },
   previewNode: {
-    width: 22,
-    height: 22,
+    width: 20,
+    height: 20,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    backgroundColor: "rgba(255,255,255,0.08)",
   },
-  previewEmpty: {
-    opacity: 0.4,
-  },
-  plus: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#fff",
-    lineHeight: 26,
-  },
-  cardLabel: {
-    marginTop: 4,
-    fontWeight: "700",
-    color: "#f5f5f5",
-  },
-  cardHint: {
-    marginTop: 0,
-    fontSize: 12,
-    color: "rgba(255,255,255,0.65)",
+  swipeActionWrapRight: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "flex-end",
+    paddingRight: 16,
   },
 })
 

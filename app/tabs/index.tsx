@@ -1,7 +1,7 @@
 ﻿import FontAwesome6 from "@expo/vector-icons/FontAwesome6"
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
   Animated,
@@ -24,6 +24,16 @@ import { bjjData } from "../BjjData"
 import MovesMenue from "../MovesMenue"
 import { moveVideoMap, toYouTubeEmbedWithParams } from "../TechniqueVideo"
 import { useFlow, type Node } from "../FlowStore"
+import GameLobby from "../GameLobby"
+import {
+  createGameSave,
+  loadGameSaves,
+  loadAutoSave,
+  persistGameSaves,
+  type GameSave,
+  persistAutoSave,
+  updateGameSaveNodes,
+} from "../gameSaves"
 
 type Axis = "x" | "y"
 type Direction = "left" | "right" | "up" | "down"
@@ -93,8 +103,32 @@ function neighborKey(dir: Direction): keyof Node {
 }
 
 export default function Index() {
-  const { nodes, setNodes, currentId, setCurrentId } = useFlow()
+  const { nodes, setNodes, currentId, setCurrentId, showLobby, setShowLobby, rootId } = useFlow()
   const [playingIds, setPlayingIds] = useState<Record<string, boolean>>({})
+  const [saves, setSaves] = useState<GameSave[]>([])
+  const [activeSaveId, setActiveSaveId] = useState<string | null>(null)
+  const lastSyncedRef = useRef<string | null>(null)
+
+  const resetToBlankFlow = useCallback(() => {
+    const blank: Node = {
+      id: rootId,
+      title: "Start Here",
+      moveId: undefined,
+      videoUrl: undefined,
+      group: undefined,
+      type: undefined,
+      stage: undefined,
+      notes: undefined,
+      left: undefined,
+      right: undefined,
+      up: undefined,
+      down: undefined,
+    }
+    setNodes({ [rootId]: blank })
+    setCurrentId(rootId)
+    setPlayingIds({})
+    lastSyncedRef.current = null
+  }, [rootId, setNodes, setCurrentId])
 
   const [menuVisible, setMenuVisible] = useState(false)
   const [menuDirection, setMenuDirection] = useState<null | "right" | "down">(null)
@@ -514,6 +548,125 @@ export default function Index() {
     )
   }
 
+  const loadSavesFromStorage = useCallback(async () => {
+    const loaded = await loadGameSaves()
+    setSaves(loaded)
+  }, [])
+
+  useEffect(() => {
+    loadSavesFromStorage()
+  }, [loadSavesFromStorage])
+
+  // Load last autosave if present.
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      const snapshot = await loadAutoSave()
+      if (cancelled || !snapshot) return
+      setNodes(snapshot.nodes)
+      setCurrentId(snapshot.currentId || rootId)
+      setShowLobby(false)
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [rootId, setNodes, setCurrentId, setShowLobby])
+
+  const handleCreateSave = useCallback(
+    async (name: string) => {
+      // Start from a blank flow when creating a new save.
+      resetToBlankFlow()
+      const blankNodes = {
+        [rootId]: {
+          id: rootId,
+          title: "Start Here",
+          moveId: undefined,
+          videoUrl: undefined,
+          group: undefined,
+          type: undefined,
+          stage: undefined,
+          notes: undefined,
+          left: undefined,
+          right: undefined,
+          up: undefined,
+          down: undefined,
+        },
+      } satisfies Record<string, Node>
+
+      const newSave = createGameSave(name, blankNodes, rootId)
+      const next = [...saves, newSave]
+      setSaves(next)
+      await persistGameSaves(next)
+      setActiveSaveId(newSave.id)
+      setShowLobby(false)
+    },
+    [resetToBlankFlow, rootId, saves, setShowLobby],
+  )
+
+  const handleOpenSave = useCallback(
+    async (id: string) => {
+      const target = saves.find((s) => s.id === id)
+      if (!target) return
+      setNodes(target.nodes)
+      setCurrentId(target.currentId || rootId)
+      setActiveSaveId(id)
+      setShowLobby(false)
+    },
+    [rootId, saves, setNodes, setCurrentId, setShowLobby],
+  )
+
+  const handleDeleteSave = useCallback(
+    async (id: string) => {
+      const next = saves.filter((s) => s.id !== id)
+      setSaves(next)
+      await persistGameSaves(next)
+      if (activeSaveId === id) {
+        setActiveSaveId(null)
+        resetToBlankFlow()
+      }
+    },
+    [activeSaveId, resetToBlankFlow, saves],
+  )
+
+  // Autosave current flow (debounced).
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      persistAutoSave({ nodes, currentId, updatedAt: Date.now() }).catch(() => {})
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [nodes, currentId])
+
+  // If a save is active, sync it when the flow changes.
+  useEffect(() => {
+    if (!activeSaveId) return
+    const sig = JSON.stringify({ nodes, currentId })
+    if (lastSyncedRef.current === sig) return
+    lastSyncedRef.current = sig
+
+    setSaves((prev) => {
+      const target = prev.find((s) => s.id === activeSaveId)
+      if (!target) return prev
+      const updated = updateGameSaveNodes(target, nodes, currentId)
+      const next = prev.map((s) => (s.id === activeSaveId ? updated : s))
+      persistGameSaves(next).catch(() => {})
+      return next
+    })
+  }, [activeSaveId, nodes, currentId])
+
+  if (showLobby) {
+    return (
+      <GameLobby
+        saves={saves}
+        onCreateSave={handleCreateSave}
+        onOpenSave={handleOpenSave}
+        onDeleteSave={handleDeleteSave}
+        baseNodeLookup={baseNodeLookup}
+        onBack={() => setShowLobby(false)}
+      />
+    )
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <PanGestureHandler
@@ -524,6 +677,21 @@ export default function Index() {
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: "#0b0d12" }}>
           <View style={{ flex: 1, padding: 16 }}>
+            <Pressable
+              onPress={() => setShowLobby(true)}
+              style={{
+                alignSelf: "flex-start",
+                marginBottom: 8,
+                paddingVertical: 6,
+                paddingHorizontal: 10,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.15)",
+                backgroundColor: "rgba(255,255,255,0.05)",
+              }}
+            >
+              <Text style={{ color: "#f5f5f5", fontWeight: "600" }}>{"\u2190"} Back to Lobby</Text>
+            </Pressable>
             <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
               <Animated.View
                 style={{

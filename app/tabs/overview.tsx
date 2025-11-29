@@ -99,7 +99,7 @@ function computeGrid(nodes: Record<string, any>, rootId: string) {
 
 export default function Overview() {
   const router = useRouter()
-  const { nodes, setCurrentId, currentId, rootId } = useFlow()
+  const { nodes, setCurrentId, currentId, rootId, setShowLobby } = useFlow()
 
   const panX = useRef(new Animated.Value(0)).current
   const panY = useRef(new Animated.Value(0)).current
@@ -188,9 +188,26 @@ export default function Overview() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#0b0d12" }}>
-      <View style={{ padding: 16 }}>
+      <View style={{ padding: 16, gap: 8 }}>
+        <Pressable
+          onPress={() => {
+            setShowLobby(true)
+            router.push("/tabs")
+          }}
+          style={{
+            alignSelf: "flex-start",
+            paddingVertical: 6,
+            paddingHorizontal: 10,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: "rgba(255,255,255,0.15)",
+            backgroundColor: "rgba(255,255,255,0.05)",
+          }}
+        >
+          <Text style={{ color: "#f5f5f5", fontWeight: "600" }}>{"\u2190"} Back to Lobby</Text>
+        </Pressable>
         <Text style={{ color: "#f8fafc", fontSize: 18, fontWeight: "800" }}>Overview</Text>
-        <Text style={{ color: "#94a3b8", marginTop: 6 }}>Tap a node to jump back into the flow.</Text>
+        <Text style={{ color: "#94a3b8", marginTop: 2 }}>Tap a node to jump back into the flow.</Text>
       </View>
 
       <PinchGestureHandler
