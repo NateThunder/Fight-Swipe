@@ -17,8 +17,9 @@ import {
   PanGestureHandler,
   type PanGestureHandlerGestureEvent,
 } from "react-native-gesture-handler"
-import { SafeAreaView } from "react-native-safe-area-context"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { WebView } from "react-native-webview"
+import { BlurView } from "expo-blur"
 import type { BJJNode } from "../BjjData"
 import { bjjData } from "../BjjData"
 import MovesMenue from "../MovesMenue"
@@ -107,6 +108,7 @@ export default function Index() {
   const [playingIds, setPlayingIds] = useState<Record<string, boolean>>({})
   const [saves, setSaves] = useState<GameSave[]>([])
   const [activeSaveId, setActiveSaveId] = useState<string | null>(null)
+  const insets = useSafeAreaInsets()
   const lastSyncedRef = useRef<string | null>(null)
 
   const resetToBlankFlow = useCallback(() => {
@@ -675,23 +677,31 @@ export default function Index() {
         onGestureEvent={handleGestureEvent}
         onEnded={handleGestureEnd}
       >
-        <SafeAreaView style={{ flex: 1, backgroundColor: "#0b0d12" }}>
-          <View style={{ flex: 1, padding: 16 }}>
-            <Pressable
-              onPress={() => setShowLobby(true)}
-              style={{
-                alignSelf: "flex-start",
-                marginBottom: 8,
-                paddingVertical: 6,
-                paddingHorizontal: 10,
-                borderRadius: 999,
-                borderWidth: 1,
-                borderColor: "rgba(255,255,255,0.15)",
-                backgroundColor: "rgba(255,255,255,0.05)",
-              }}
-            >
-              <Text style={{ color: "#f5f5f5", fontWeight: "600" }}>{"\u2190"} Back to Lobby</Text>
-            </Pressable>
+        <View style={{ flex: 1, backgroundColor: "#0b0d12" }}>
+          <View
+            style={{
+              flex: 1,
+              paddingHorizontal: 16,
+              paddingTop: 0,
+              paddingBottom: 16,
+            }}
+          >
+            <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 20, left: 16, zIndex: 200 }}>
+              <View
+                style={{
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  borderWidth: 1,
+                  borderColor: "rgba(255,255,255,0.14)",
+                }}
+              >
+                <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+                  <Pressable onPress={() => setShowLobby(true)} style={{ borderRadius: 999 }}>
+                    <Text style={{ color: "#f5f5f5", fontWeight: "600" }}>{"\u2190"} Back to Lobby</Text>
+                  </Pressable>
+                </BlurView>
+              </View>
+            </View>
             <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
               <Animated.View
                 style={{
@@ -918,7 +928,7 @@ export default function Index() {
             }}
             onSelectMove={handleMovePicked}
           />
-        </SafeAreaView>
+        </View>
       </PanGestureHandler>
     </GestureHandlerRootView>
   )

@@ -1,5 +1,5 @@
-import { useMemo, useRef } from "react"
-import { Animated, Pressable, Text, View } from "react-native"
+import { useMemo, useRef, useState } from "react"
+import { Animated, Pressable, Text, View, StyleSheet } from "react-native"
 import { useRouter } from "expo-router"
 import Svg, { Line } from "react-native-svg"
 import {
@@ -10,6 +10,8 @@ import {
   type PanGestureHandlerGestureEvent,
   type PinchGestureHandlerGestureEvent,
 } from "react-native-gesture-handler"
+import { BlurView } from "expo-blur"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { useFlow } from "../FlowStore"
 
 type Dir = "left" | "right" | "up" | "down"
@@ -100,6 +102,7 @@ function computeGrid(nodes: Record<string, any>, rootId: string) {
 export default function Overview() {
   const router = useRouter()
   const { nodes, setCurrentId, currentId, rootId, setShowLobby } = useFlow()
+  const insets = useSafeAreaInsets()
 
   const panX = useRef(new Animated.Value(0)).current
   const panY = useRef(new Animated.Value(0)).current
@@ -108,6 +111,7 @@ export default function Overview() {
   const scale = Animated.multiply(baseScale, pinchScale)
   const lastPan = useRef({ x: 0, y: 0 })
   const lastScale = useRef(1)
+  const [isPanning, setIsPanning] = useState(false)
 
   const { positioned, edges, canvasW, canvasH, nodeW, nodeH } = useMemo(() => {
     const nodeW = 150
@@ -162,13 +166,21 @@ export default function Overview() {
       panX.setValue(0)
       panY.setValue(0)
     }
-    if (nativeEvent.state === State.END || nativeEvent.state === State.CANCELLED) {
+    if (nativeEvent.state === State.ACTIVE) {
+      setIsPanning(true)
+    }
+    if (
+      nativeEvent.state === State.END ||
+      nativeEvent.state === State.CANCELLED ||
+      nativeEvent.state === State.FAILED
+    ) {
       lastPan.current = {
         x: lastPan.current.x + nativeEvent.translationX,
         y: lastPan.current.y + nativeEvent.translationY,
       }
       panX.flattenOffset()
       panY.flattenOffset()
+      setIsPanning(false)
     }
   }
 
@@ -188,26 +200,62 @@ export default function Overview() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#0b0d12" }}>
-      <View style={{ padding: 16, gap: 8 }}>
-        <Pressable
-          onPress={() => {
-            setShowLobby(true)
-            router.push("/tabs")
-          }}
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: "absolute",
+          top: insets.top + 20,
+          left: 16,
+          right: 16,
+          zIndex: 200,
+          gap: 8,
+        }}
+      >
+        <View
           style={{
+            borderRadius: 16,
+            overflow: "hidden",
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: "rgba(255,255,255,0.14)",
             alignSelf: "flex-start",
-            paddingVertical: 6,
-            paddingHorizontal: 10,
-            borderRadius: 999,
-            borderWidth: 1,
-            borderColor: "rgba(255,255,255,0.15)",
-            backgroundColor: "rgba(255,255,255,0.05)",
           }}
         >
-          <Text style={{ color: "#f5f5f5", fontWeight: "600" }}>{"\u2190"} Back to Lobby</Text>
-        </Pressable>
-        <Text style={{ color: "#f8fafc", fontSize: 18, fontWeight: "800" }}>Overview</Text>
-        <Text style={{ color: "#94a3b8", marginTop: 2 }}>Tap a node to jump back into the flow.</Text>
+          <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
+            <Pressable
+              onPress={() => {
+                setShowLobby(true)
+                router.push("/tabs")
+              }}
+              style={{ borderRadius: 999 }}
+            >
+              <Text style={{ color: "#f5f5f5", fontWeight: "600" }}>{"\u2190"} Back to Lobby</Text>
+            </Pressable>
+          </BlurView>
+        </View>
+
+        <View
+          style={{
+            borderRadius: 16,
+            overflow: "hidden",
+            alignSelf: "center",
+          }}
+        >
+          <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 14, paddingVertical: 10 }}>
+            <Text style={{ color: "#f8fafc", fontSize: 18, fontWeight: "800", textAlign: "center" }}>Overview</Text>
+          </BlurView>
+        </View>
+
+        <View
+          style={{
+            borderRadius: 16,
+            overflow: "hidden",
+            alignSelf: "center",
+          }}
+        >
+          <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 14, paddingVertical: 10 }}>
+            <Text style={{ color: "#94a3b8", textAlign: "center" }}>Tap a node to jump back into the flow.</Text>
+          </BlurView>
+        </View>
       </View>
 
       <PinchGestureHandler
@@ -218,6 +266,7 @@ export default function Overview() {
           <PanGestureHandler
             onGestureEvent={onPanGestureEvent}
             onHandlerStateChange={onPanStateChange}
+            minDist={8}
             minPointers={1}
             maxPointers={2}
           >
@@ -263,8 +312,10 @@ export default function Overview() {
                       <Pressable
                         key={id}
                         onPress={() => {
+                          if (isPanning) return
                           setCurrentId(id)
-                          router.push("/tabs")
+                          setShowLobby(false)
+                          router.back()
                         }}
                         style={{
                           position: "absolute",
