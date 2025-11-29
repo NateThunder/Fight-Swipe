@@ -716,7 +716,7 @@ export default function Index() {
                   alignItems: "center",
                   justifyContent: "center",
                   borderRadius: 20,
-                  borderWidth: 1,
+                  borderWidth: 0,
                   padding: 12,
                   overflow: "visible",
                   transform: stageTransform,
