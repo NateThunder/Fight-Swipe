@@ -1,17 +1,17 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
+import { BlurView } from "expo-blur"
 import React, { FC, useCallback, useMemo, useRef, useState } from "react"
-import { Animated, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native"
+import { Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native"
 import { GestureHandlerRootView, Swipeable } from "react-native-gesture-handler"
 import {
-    Button,
-    Card,
-    HelperText,
-    IconButton,
-    Modal,
-    Portal,
-    Text,
-    TextInput,
-    useTheme,
+  Button,
+  Card,
+  HelperText,
+  Modal,
+  Portal,
+  Text,
+  TextInput,
+  useTheme
 } from "react-native-paper"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import type { BJJNode, StageId } from "./BjjData"
@@ -160,6 +160,57 @@ const GameLobby: FC<GameLobbyProps> = ({
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
       >
+        {/* Anchored header at top */}
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 50,
+            gap: 8,
+            paddingTop: insets.top + 20,
+            paddingHorizontal: 16,
+            alignItems: "center",
+            paddingBottom: 12,
+          }}
+        >
+          {/* Label */}
+          <View style={{ overflow: "hidden", borderRadius: 12, borderColor: "rgba(255,255,255,0.14)" }}>
+            <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+              <Text
+                variant="labelSmall"
+                style={{
+                  color: "#94a3b8",
+                  letterSpacing: 1,
+                  textTransform: "uppercase",
+                  textAlign: "center",
+                }}
+              >
+                Saved Flow Charts
+              </Text>
+            </BlurView>
+          </View>
+
+          {/* Heading */}
+          <View style={{ overflow: "hidden", borderRadius: 12, borderColor: "rgba(255,255,255,0.14)" }}>
+            <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+              <Text variant="headlineSmall" style={{ fontWeight: "800", textAlign: "center", color: "#f8fafc" }}>
+                Choose a Flow Chart
+              </Text>
+            </BlurView>
+          </View>
+
+          {/* Tip */}
+          <View style={{ overflow: "hidden", borderRadius: 12, borderColor: "rgba(255,255,255,0.14)" }}>
+            <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+              <Text variant="bodySmall" style={{ color: "#94a3b8", textAlign: "center" }}>
+                Tip: swipe a card left to delete.
+              </Text>
+            </BlurView>
+          </View>
+        </View>
+
         <ScrollView
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={[
@@ -170,32 +221,11 @@ const GameLobby: FC<GameLobbyProps> = ({
               alignItems: "stretch",
               width: "100%",
               paddingBottom: 0,
+              paddingTop: insets.top + 160,
             },
           ]}
           style={{ flex: 1, backgroundColor: theme.colors.background }}
         >
-        <View style={[styles.header, { paddingTop: insets.top + 20, paddingHorizontal: 16 }]}>
-          <Text
-            variant="labelSmall"
-            style={{
-              color: theme.colors.onSurfaceVariant,
-              letterSpacing: 1,
-              textTransform: "uppercase",
-              textAlign: "center",
-            }}
-          >
-            Saved Flow Charts
-          </Text>
-
-          <Text variant="headlineSmall" style={{ fontWeight: "800", textAlign: "center" }}>
-            Choose a Flow Chart
-          </Text>
-
-          <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant, textAlign: "center" }}>
-            Tip: swipe a card left to delete.
-          </Text>
-        </View>
-
           <View style={[styles.grid, { gap }]}>
             {safeSaves.map((save) => {
               const stages = buildPreviewStages(save)
@@ -263,30 +293,31 @@ const GameLobby: FC<GameLobbyProps> = ({
           </View>
         </ScrollView>
 
+        {/* Anchored frosted glass button */}
         <View
           style={{
+            position: "absolute",
+            bottom: insets.bottom + 20,
+            left: 0,
+            right: 0,
             alignItems: "center",
-            paddingTop: 4,
-            paddingBottom: 16,
-            backgroundColor: theme.colors.background,
+            zIndex: 100,
+            pointerEvents: "box-none",
           }}
         >
-          <IconButton
-            icon="plus"
-            size={20}
-            onPress={openNameDialog}
-            style={{
-              backgroundColor: theme.colors.surfaceVariant,
-              borderRadius: 999,
-              width: 36,
-              height: 36,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          />
-          <Text variant="bodySmall" style={{ fontWeight: "600", marginTop: 2 }}>
-            Create New Flow Chart
-          </Text>
+          <View style={{ overflow: "hidden", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.14)" }}>
+            <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 16, paddingVertical: 12, borderRadius: 16 }}>
+              <Pressable
+                onPress={openNameDialog}
+                style={{ flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 999 }}
+              >
+                <MaterialCommunityIcons name="plus" size={24} color="#f8fafc" />
+                <Text style={{ color: "#f8fafc", fontWeight: "700", fontSize: 16 }}>
+                  Create New Flow Chart
+                </Text>
+              </Pressable>
+            </BlurView>
+          </View>
         </View>
       </KeyboardAvoidingView>
 
