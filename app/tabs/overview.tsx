@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from "react"
-import { Animated, Pressable, Text, View, StyleSheet } from "react-native"
-import { useRouter } from "expo-router"
-import Svg, { Line } from "react-native-svg"
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { BlurView } from "expo-blur";
+import { useRouter } from "expo-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Dimensions, Pressable, StyleSheet, Text, View } from "react-native";
 import {
   GestureHandlerRootView,
   PanGestureHandler,
@@ -9,10 +10,10 @@ import {
   State,
   type PanGestureHandlerGestureEvent,
   type PinchGestureHandlerGestureEvent,
-} from "react-native-gesture-handler"
-import { BlurView } from "expo-blur"
-import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { useFlow } from "../FlowStore"
+} from "react-native-gesture-handler";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import Svg, { Line } from "react-native-svg";
+import { useFlow } from "../FlowStore";
 
 type Dir = "left" | "right" | "up" | "down"
 const DIRS: Dir[] = ["left", "right", "up", "down"]
@@ -104,13 +105,18 @@ export default function Overview() {
   const { nodes, setCurrentId, currentId, rootId, setShowLobby } = useFlow()
   const insets = useSafeAreaInsets()
 
-  const panX = useRef(new Animated.Value(0)).current
-  const panY = useRef(new Animated.Value(0)).current
+  const camX = useRef(new Animated.Value(0)).current
+  const camY = useRef(new Animated.Value(0)).current
+  const gX = useRef(new Animated.Value(0)).current
+  const gY = useRef(new Animated.Value(0)).current
+  const translateX = Animated.add(camX, gX)
+  const translateY = Animated.add(camY, gY)
   const baseScale = useRef(new Animated.Value(1)).current
   const pinchScale = useRef(new Animated.Value(1)).current
   const scale = Animated.multiply(baseScale, pinchScale)
   const lastPan = useRef({ x: 0, y: 0 })
   const lastScale = useRef(1)
+  const hasInitialized = useRef(false)
   const [isPanning, setIsPanning] = useState(false)
 
   const { positioned, edges, canvasW, canvasH, nodeW, nodeH } = useMemo(() => {
@@ -152,20 +158,33 @@ export default function Overview() {
     return { positioned, edges, canvasW, canvasH, nodeW, nodeH }
   }, [nodes, rootId])
 
+  // Initialize centering ONCE on mount, not on every render
+  useEffect(() => {
+    if (hasInitialized.current) return
+    hasInitialized.current = true
+
+    const rootPos = positioned[rootId]
+    if (!rootPos) return
+    const { width: vw, height: vh } = Dimensions.get("window")
+    const extraDown = insets.top + 120
+    const centerX = vw / 2 - (rootPos.x + nodeW / 2)
+    const centerY = (vh / 2 + extraDown) - (rootPos.y + nodeH / 2)
+
+    lastPan.current = { x: centerX, y: centerY }
+    camX.setValue(centerX)
+    camY.setValue(centerY)
+    gX.setValue(0)
+    gY.setValue(0)
+  }, [])
+
   const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
 
   const onPanGestureEvent = Animated.event<PanGestureHandlerGestureEvent["nativeEvent"]>(
-    [{ nativeEvent: { translationX: panX, translationY: panY } }],
+    [{ nativeEvent: { translationX: gX, translationY: gY } }],
     { useNativeDriver: true },
   )
 
   const onPanStateChange = ({ nativeEvent }: PanGestureHandlerGestureEvent) => {
-    if (nativeEvent.state === State.BEGAN) {
-      panX.setOffset(lastPan.current.x)
-      panY.setOffset(lastPan.current.y)
-      panX.setValue(0)
-      panY.setValue(0)
-    }
     if (nativeEvent.state === State.ACTIVE) {
       setIsPanning(true)
     }
@@ -178,8 +197,10 @@ export default function Overview() {
         x: lastPan.current.x + nativeEvent.translationX,
         y: lastPan.current.y + nativeEvent.translationY,
       }
-      panX.flattenOffset()
-      panY.flattenOffset()
+      camX.setValue(lastPan.current.x)
+      camY.setValue(lastPan.current.y)
+      gX.setValue(0)
+      gY.setValue(0)
       setIsPanning(false)
     }
   }
@@ -198,6 +219,24 @@ export default function Overview() {
     }
   }
 
+  // center helper (exposed to the top-right button)
+  const centerRoot = useCallback(() => {
+    const rootPos = positioned[rootId]
+    if (!rootPos) return
+    const { width: vw, height: vh } = Dimensions.get("window")
+    const extraDown = insets.top - 120
+    const targetScreenX = vw / 2
+    const targetScreenY = vh / 2 + extraDown
+    const centerX = targetScreenX - (rootPos.x + nodeW / 2)
+    const centerY = targetScreenY - (rootPos.y + nodeH / 2)
+
+    camX.setValue(centerX)
+    camY.setValue(centerY)
+    gX.setValue(0)
+    gY.setValue(0)
+    lastPan.current = { x: centerX, y: centerY }
+  }, [positioned, rootId, nodeW, nodeH, insets.top, camX, camY, gX, gY])
+
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#0b0d12" }}>
       <View
@@ -208,16 +247,19 @@ export default function Overview() {
           left: 16,
           right: 16,
           zIndex: 200,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
           gap: 8,
         }}
       >
+        {/* top-left back button */}
         <View
           style={{
             borderRadius: 16,
             overflow: "hidden",
             borderWidth: StyleSheet.hairlineWidth,
             borderColor: "rgba(255,255,255,0.14)",
-            alignSelf: "flex-start",
           }}
         >
           <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 12, paddingVertical: 8 }}>
@@ -233,6 +275,27 @@ export default function Overview() {
           </BlurView>
         </View>
 
+        {/* top-right center button */}
+        <View style={{ alignSelf: "center", overflow: "hidden", borderRadius: 12 }}>
+          <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
+            <Pressable onPress={centerRoot} style={{ padding: 4, borderRadius: 999 }}>
+              <MaterialCommunityIcons name="image-filter-center-focus-weak" size={20} color="#f8fafc" />
+            </Pressable>
+          </BlurView>
+        </View>
+      </View>
+
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: "absolute",
+          top: insets.top + 80,
+          left: 16,
+          right: 16,
+          zIndex: 200,
+          gap: 8,
+        }}
+      >
         <View
           style={{
             borderRadius: 16,
@@ -273,7 +336,7 @@ export default function Overview() {
             <Animated.View style={{ flex: 1 }}>
               <Animated.View
                 style={{
-                  transform: [{ translateX: panX }, { translateY: panY }, { scale }],
+                  transform: [{ translateX }, { translateY }, { scale }],
                 }}
               >
                 <View style={{ width: canvasW, height: canvasH }}>
@@ -298,6 +361,7 @@ export default function Overview() {
                         />
                       )
                     })}
+
                   </Svg>
 
                   {Object.keys(positioned).map((id) => {
@@ -315,7 +379,7 @@ export default function Overview() {
                           if (isPanning) return
                           setCurrentId(id)
                           setShowLobby(false)
-                          router.back()
+                          router.push("/tabs")
                         }}
                         style={{
                           position: "absolute",

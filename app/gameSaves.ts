@@ -95,3 +95,8 @@ export const updateGameSaveNodes = (save: GameSave, nodes: Record<string, Node>,
   currentId,
   updatedAt: Date.now(),
 })
+
+// Default placeholder so Expo Router does not treat this utility as a missing route component.
+export default function GameSavesRoutePlaceholder() {
+  return null
+}

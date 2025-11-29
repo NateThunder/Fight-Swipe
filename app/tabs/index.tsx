@@ -1,6 +1,7 @@
 ﻿import FontAwesome6 from "@expo/vector-icons/FontAwesome6"
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
+import { BlurView } from "expo-blur"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ActivityIndicator,
@@ -19,22 +20,21 @@ import {
 } from "react-native-gesture-handler"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { WebView } from "react-native-webview"
-import { BlurView } from "expo-blur"
 import type { BJJNode } from "../BjjData"
 import { bjjData } from "../BjjData"
-import MovesMenue from "../MovesMenue"
-import { moveVideoMap, toYouTubeEmbedWithParams } from "../TechniqueVideo"
 import { useFlow, type Node } from "../FlowStore"
 import GameLobby from "../GameLobby"
 import {
   createGameSave,
-  loadGameSaves,
   loadAutoSave,
-  persistGameSaves,
-  type GameSave,
+  loadGameSaves,
   persistAutoSave,
+  persistGameSaves,
   updateGameSaveNodes,
+  type GameSave,
 } from "../gameSaves"
+import MovesMenue from "../MovesMenue"
+import { moveVideoMap, toYouTubeEmbedWithParams } from "../TechniqueVideo"
 
 type Axis = "x" | "y"
 type Direction = "left" | "right" | "up" | "down"
@@ -443,30 +443,8 @@ export default function Index() {
               alignItems: "center",
               justifyContent: "center",
               backgroundColor: "#111827",
-              padding: 24,
             }}
-          >
-            <Text
-              style={{
-                color: "#f8fafc",
-                fontSize: 18,
-                fontWeight: "700",
-                textAlign: "center",
-                marginBottom: 8,
-              }}
-            >
-              Empty node
-            </Text>
-            <Text
-              style={{
-                color: "#94a3b8",
-                fontSize: 14,
-                textAlign: "center",
-              }}
-            >
-              Add a real technique to render a video here.
-            </Text>
-          </View>
+          />
         ) : !isPlaying ? (
           <Pressable
             onPress={() => setPlayingIds((prev) => ({ ...prev, [node.id]: true }))}
@@ -671,38 +649,43 @@ export default function Index() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <PanGestureHandler
-        activeOffsetX={[-15, 15]}
-        activeOffsetY={[-15, 15]}
-        onGestureEvent={handleGestureEvent}
-        onEnded={handleGestureEnd}
-      >
-        <View style={{ flex: 1, backgroundColor: "#0b0d12" }}>
+      <View style={{ flex: 1, backgroundColor: "#0b0d12" }}>
+        <View
+          pointerEvents="box-none"
+          style={{ position: "absolute", top: insets.top + 20, left: 16, zIndex: 300 }}
+        >
           <View
             style={{
-              flex: 1,
-              paddingHorizontal: 16,
-              paddingTop: 0,
-              paddingBottom: 16,
+              borderRadius: 14,
+              overflow: "hidden",
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.14)",
             }}
           >
-            <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 20, left: 16, zIndex: 200 }}>
-              <View
-                style={{
-                  borderRadius: 14,
-                  overflow: "hidden",
-                  borderWidth: 1,
-                  borderColor: "rgba(255,255,255,0.14)",
-                }}
-              >
-                <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
-                  <Pressable onPress={() => setShowLobby(true)} style={{ borderRadius: 999 }}>
-                    <Text style={{ color: "#f5f5f5", fontWeight: "600" }}>{"\u2190"} Back to Lobby</Text>
-                  </Pressable>
-                </BlurView>
-              </View>
-            </View>
-            <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+            <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+              <Pressable onPress={() => setShowLobby(true)} style={{ borderRadius: 999 }}>
+                <Text style={{ color: "#f5f5f5", fontWeight: "600" }}>{"\u2190"} Back to Lobby</Text>
+              </Pressable>
+            </BlurView>
+          </View>
+        </View>
+
+        <PanGestureHandler
+          activeOffsetX={[-15, 15]}
+          activeOffsetY={[-15, 15]}
+          onGestureEvent={handleGestureEvent}
+          onEnded={handleGestureEnd}
+        >
+          <View style={{ flex: 1 }}>
+            <View
+              style={{
+                flex: 1,
+                paddingHorizontal: 16,
+                paddingTop: 0,
+                paddingBottom: 16,
+              }}
+            >
+              <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
               <Animated.View
                 style={{
                   width: outerWidth,
@@ -928,8 +911,9 @@ export default function Index() {
             }}
             onSelectMove={handleMovePicked}
           />
-        </View>
-      </PanGestureHandler>
+          </View>
+        </PanGestureHandler>
+      </View>
     </GestureHandlerRootView>
   )
 }
