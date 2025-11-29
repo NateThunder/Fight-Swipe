@@ -1,20 +1,21 @@
-import React, { FC, useMemo, useRef, useState, useCallback } from "react"
+import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
+import React, { FC, useCallback, useMemo, useRef, useState } from "react"
 import { Animated, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native"
 import { GestureHandlerRootView, Swipeable } from "react-native-gesture-handler"
 import {
-  Button,
-  Card,
-  Dialog,
-  HelperText,
-  IconButton,
-  Portal,
-  Text,
-  TextInput,
-  useTheme,
+    Button,
+    Card,
+    Dialog,
+    HelperText,
+    IconButton,
+    Portal,
+    Text,
+    TextInput,
+    useTheme,
 } from "react-native-paper"
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
-import type { GameSave } from "./gameSaves"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import type { BJJNode, StageId } from "./BjjData"
+import type { GameSave } from "./gameSaves"
 
 interface GameLobbyProps {
   // Rename these upstream if you want, but it’s not required.
@@ -48,6 +49,7 @@ const GameLobby: FC<GameLobbyProps> = ({
 }) => {
   const theme = useTheme()
   const { width } = useWindowDimensions()
+  const insets = useSafeAreaInsets()
 
   const safeSaves = Array.isArray(saves) ? saves : []
   const safeLookup = baseNodeLookup ?? {}
@@ -167,7 +169,7 @@ const GameLobby: FC<GameLobbyProps> = ({
           ]}
           style={{ flex: 1, backgroundColor: theme.colors.background }}
         >
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: insets.top + 20, paddingHorizontal: 16 }]}>
           <Text
             variant="labelSmall"
             style={{
