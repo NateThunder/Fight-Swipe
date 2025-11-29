@@ -1,13 +1,13 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
 import React, { FC, useCallback, useMemo, useRef, useState } from "react"
-import { Animated, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native"
+import { Animated, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native"
 import { GestureHandlerRootView, Swipeable } from "react-native-gesture-handler"
 import {
     Button,
     Card,
-    Dialog,
     HelperText,
     IconButton,
+    Modal,
     Portal,
     Text,
     TextInput,
@@ -155,8 +155,13 @@ const GameLobby: FC<GameLobbyProps> = ({
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <View style={{ flex: 1 }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 40 : 0}
+      >
         <ScrollView
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={[
             styles.container,
             {
@@ -283,12 +288,28 @@ const GameLobby: FC<GameLobbyProps> = ({
             Create New Flow Chart
           </Text>
         </View>
-      </View>
+      </KeyboardAvoidingView>
 
       <Portal>
-        <Dialog visible={nameDialogOpen} onDismiss={closeNameDialog}>
-          <Dialog.Title>Name your flow chart</Dialog.Title>
-          <Dialog.Content>
+        <Modal
+          visible={nameDialogOpen}
+          onDismiss={closeNameDialog}
+          contentContainerStyle={{
+            marginHorizontal: 16,
+            marginTop: 16,
+            marginBottom: 85,
+            borderRadius: 16,
+            backgroundColor: theme.colors.surface,
+            padding: 16,
+            alignSelf: "center",
+            width: "100%",
+            maxWidth: 420,
+            justifyContent: "center",
+          }}
+        >
+          <View style={{ paddingBottom: 0 }}>
+            <Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 12 }}>Name your flow chart</Text>
+
             <TextInput
               label="Flow chart name"
               mode="outlined"
@@ -304,14 +325,15 @@ const GameLobby: FC<GameLobbyProps> = ({
             <HelperText type="error" visible={!!nameError}>
               {nameError}
             </HelperText>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={closeNameDialog}>Cancel</Button>
-            <Button mode="contained" onPress={submitCreate}>
-              Create
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
+
+            <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+              <Button onPress={closeNameDialog}>Cancel</Button>
+              <Button mode="contained" onPress={submitCreate}>
+                Create
+              </Button>
+            </View>
+          </View>
+        </Modal>
       </Portal>
     </GestureHandlerRootView>
   )

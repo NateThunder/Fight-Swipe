@@ -87,3 +87,8 @@ export function useFlow() {
   if (!ctx) throw new Error("useFlow must be used inside <FlowProvider>")
   return ctx
 }
+
+// Default placeholder so Expo Router does not treat this utility as a missing route component.
+export default function FlowStoreRoutePlaceholder() {
+  return null
+}

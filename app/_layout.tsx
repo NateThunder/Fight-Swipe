@@ -1,8 +1,8 @@
-import "react-native-gesture-handler";
-import { Tabs } from "expo-router";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { Tabs } from "expo-router";
 import { View } from "react-native";
+import "react-native-gesture-handler";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Provider as PaperProvider } from "react-native-paper";
 import { FlowProvider } from "./FlowStore";
 
@@ -60,6 +60,8 @@ export default function RootLayout() {
             <Tabs.Screen name="TechniqueVideo" options={{ href: null }} />
             <Tabs.Screen name="GameLobby" options={{ href: null }} />
             <Tabs.Screen name="asyncStorage" options={{ href: null }} />
+            <Tabs.Screen name="FlowStore" options={{ href: null }} />
+            <Tabs.Screen name="gameSaves" options={{ href: null }} />
           </Tabs>
         </FlowProvider>
       </PaperProvider>
