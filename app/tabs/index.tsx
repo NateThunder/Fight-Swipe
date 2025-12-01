@@ -842,14 +842,18 @@ export default function Index() {
                     justifyContent: "center",
                   }}
                 >
+                  {/* Arrow line (if branch exists) */}
                   {hasRight ? (
                     <View pointerEvents="none">
                       <MaterialIcons name="arrow-forward-ios" size={24} color="rgba(148,163,184,0.85)" />
                     </View>
-                  ) : isTerminal ? (
-                    <View pointerEvents="none" style={{ width: 34, height: 34 }} />
-                  ) : !currentNode?.moveId && Object.keys(nodes).length === 1 ? (
-                    <View pointerEvents="none" style={{ width: 34, height: 34 }} />
+                  ) : (
+                    <View />
+                  )}
+
+                  {/* Plus stays visible even after a branch exists (unless terminal/empty) */}
+                  {isTerminal || (!currentNode?.moveId && Object.keys(nodes).length === 1) ? (
+                    <View pointerEvents="none" style={{ width: 34, height: 34, marginTop: 6 }} />
                   ) : (
                     <Pressable
                       onPress={() => openMoveMenu("right")}
@@ -859,6 +863,7 @@ export default function Index() {
                         borderRadius: 17,
                         alignItems: "center",
                         justifyContent: "center",
+                        marginTop: 6,
                       }}
                       hitSlop={10}
                     >
