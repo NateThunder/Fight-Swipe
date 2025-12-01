@@ -16,6 +16,10 @@ export type Node = {
   right?: string
   up?: string
   down?: string
+  leftBranches?: string[]
+  rightBranches?: string[]
+  upBranches?: string[]
+  downBranches?: string[]
 }
 
 const ROOT_ID = "root"

@@ -38,6 +38,7 @@ import { moveVideoMap, toYouTubeEmbedWithParams } from "../TechniqueVideo"
 
 type Axis = "x" | "y"
 type Direction = "left" | "right" | "up" | "down"
+type BranchKey = "leftBranches" | "rightBranches" | "upBranches" | "downBranches"
 
 const buildEmbedUrl = (id: string) => `https://www.youtube.com/embed/${id}?rel=0&playsinline=1`
 
@@ -101,6 +102,27 @@ function neighborKey(dir: Direction): keyof Node {
     case "down":
       return "down"
   }
+}
+
+function branchListKey(dir: Direction): BranchKey {
+  switch (dir) {
+    case "left":
+      return "leftBranches"
+    case "right":
+      return "rightBranches"
+    case "up":
+      return "upBranches"
+    case "down":
+      return "downBranches"
+  }
+}
+
+function getBranchList(node: Node | undefined, dir: Direction): string[] {
+  if (!node) return []
+  const list = node[branchListKey(dir)] ?? []
+  if (list.length > 0) return list
+  const single = node[neighborKey(dir)]
+  return single ? [single as string] : []
 }
 
 export default function Index() {
@@ -172,8 +194,7 @@ export default function Index() {
 
   const getNeighborId = useCallback(
     (dir: Direction) => {
-      const k = neighborKey(dir)
-      return nodes[currentId]?.[k]
+      return getBranchList(nodes[currentId], dir)[0]
     },
     [currentId, nodes],
   )
@@ -359,19 +380,25 @@ export default function Index() {
 
   const attachMoveToDirection = useCallback(
     (move: BJJNode, dir: "right" | "down", parentId: string) => {
-      const newId = `node-${Date.now()}`
       const forwardKey = neighborKey(dir)
       const backKey = neighborKey(opposite(dir))
+      const branchKey = branchListKey(dir)
+      const newId = `node-${Date.now()}`
       const embedUrl = buildVideoUrl(move.id)
 
       setNodes((prev) => {
         const parent = prev[parentId]
-        if (!parent || parent[forwardKey]) return prev
+        if (!parent) return prev
         if (parent.type === "Submission" || parent.stage === 4) return prev
+
+        const branchList = parent[branchKey] ? [...parent[branchKey]!] : []
+        const existingForward = parent[forwardKey] as string | undefined
+        if (existingForward && !branchList.includes(existingForward)) branchList.unshift(existingForward)
+        branchList.push(newId)
 
         return {
           ...prev,
-          [parentId]: { ...parent, [forwardKey]: newId },
+          [parentId]: { ...parent, [forwardKey]: branchList[0], [branchKey]: branchList },
           [newId]: {
             id: newId,
             title: move.name,
@@ -388,7 +415,7 @@ export default function Index() {
 
       setCurrentId(newId)
     },
-    [],
+    [setNodes, setCurrentId],
   )
 
   const handleMovePicked = (move: BJJNode) => {
