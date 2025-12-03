@@ -489,6 +489,14 @@ export default function Index() {
     return list
   }, [currentId, distanceX, distanceY, getNeighborId])
 
+  // Root has something to "clear" if it has a move OR there are extra nodes in the graph
+  const rootHasFlow = useMemo(() => {
+    const rootNode = nodes[rootId]
+    if (!rootNode) return false
+    if (rootNode.moveId) return true
+    return Object.keys(nodes).length > 1
+  }, [nodes, rootId])
+
   const openMoveMenu = (dir?: "right" | "down") => {
     if (isTerminal) return
     setMenuDirection(dir ?? null)
@@ -695,6 +703,12 @@ export default function Index() {
       />
     )
   }
+
+  // Can we show a delete button for the current node?
+  const canDeleteCurrent =
+    !branchPickerFor &&
+    ((currentId !== rootId && !isTerminal) ||
+      (currentId === rootId && rootHasFlow))
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -977,11 +991,11 @@ export default function Index() {
                       justifyContent: "center",
                     }}
                   >
-                    {branchPickerFor ? (
-                      <View pointerEvents="none" style={{ width: 36, height: 36 }} />
-                    ) : currentId !== rootId && !isTerminal ? (
+                    {canDeleteCurrent ? (
                       <Pressable
-                        onPress={() => handleDelete(currentId)}
+                        onPress={() =>
+                          currentId === rootId ? resetToBlankFlow() : handleDelete(currentId)
+                        }
                         style={{
                           width: 36,
                           height: 36,
@@ -991,7 +1005,11 @@ export default function Index() {
                         }}
                         hitSlop={10}
                       >
-                        <MaterialCommunityIcons name="delete-forever-outline" size={20} color="#ef4444" />
+                        <MaterialCommunityIcons
+                          name="delete-forever-outline"
+                          size={20}
+                          color="#ef4444"
+                        />
                       </Pressable>
                     ) : (
                       <View pointerEvents="none" style={{ width: 36, height: 36 }} />
