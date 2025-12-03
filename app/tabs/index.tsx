@@ -38,6 +38,7 @@ import { moveVideoMap, toYouTubeEmbedWithParams } from "../TechniqueVideo"
 
 type Axis = "x" | "y"
 type Direction = "left" | "right" | "up" | "down"
+type BranchKey = "leftBranches" | "rightBranches" | "upBranches" | "downBranches"
 
 const buildEmbedUrl = (id: string) => `https://www.youtube.com/embed/${id}?rel=0&playsinline=1`
 
@@ -103,6 +104,27 @@ function neighborKey(dir: Direction): keyof Node {
   }
 }
 
+function branchListKey(dir: Direction): BranchKey {
+  switch (dir) {
+    case "left":
+      return "leftBranches"
+    case "right":
+      return "rightBranches"
+    case "up":
+      return "upBranches"
+    case "down":
+      return "downBranches"
+  }
+}
+
+function getBranchList(node: Node | undefined, dir: Direction): string[] {
+  if (!node) return []
+  const list = node[branchListKey(dir)] ?? []
+  if (list.length > 0) return list
+  const single = node[neighborKey(dir)]
+  return single ? [single as string] : []
+}
+
 export default function Index() {
   const { nodes, setNodes, currentId, setCurrentId, showLobby, setShowLobby, rootId } = useFlow()
   const [playingIds, setPlayingIds] = useState<Record<string, boolean>>({})
@@ -135,6 +157,7 @@ export default function Index() {
   const [menuVisible, setMenuVisible] = useState(false)
   const [menuDirection, setMenuDirection] = useState<null | "right" | "down">(null)
   const [menuParentId, setMenuParentId] = useState<string | null>(null)
+  const [branchPickerFor, setBranchPickerFor] = useState<string | null>(null)
 
   const translateX = useRef(new Animated.Value(0)).current
   const translateY = useRef(new Animated.Value(0)).current
@@ -172,8 +195,7 @@ export default function Index() {
 
   const getNeighborId = useCallback(
     (dir: Direction) => {
-      const k = neighborKey(dir)
-      return nodes[currentId]?.[k]
+      return getBranchList(nodes[currentId], dir)[0]
     },
     [currentId, nodes],
   )
@@ -195,6 +217,20 @@ export default function Index() {
 
   const currentNode = nodes[currentId]
   const isTerminal = currentNode?.type === "Submission" || currentNode?.stage === 4
+  const rightBranchRootNode = useMemo(() => {
+    if (!branchPickerFor) return undefined
+    return nodes[branchPickerFor]
+  }, [branchPickerFor, nodes])
+
+  const rightBranchNodes = useMemo(
+    () =>
+      rightBranchRootNode
+        ? getBranchList(rightBranchRootNode, "right")
+            .map((id) => nodes[id])
+            .filter((n): n is Node => Boolean(n))
+        : [],
+    [rightBranchRootNode, nodes],
+  )
 
   const timing = useCallback(
     (val: Animated.Value, toValue: number, onDone?: () => void) => {
@@ -308,6 +344,17 @@ export default function Index() {
         return
       }
 
+      if (dir === "right") {
+        const branchIds = getBranchList(nodes[currentId], "right")
+        if (branchIds.length > 1) {
+          springToZero(translateX)
+          springToZero(translateY)
+          lockedAxis.current = null
+          setBranchPickerFor(currentId)
+          return
+        }
+      }
+
       const neighborId = getNeighborId(dir)
 
       if (!neighborId) {
@@ -359,19 +406,25 @@ export default function Index() {
 
   const attachMoveToDirection = useCallback(
     (move: BJJNode, dir: "right" | "down", parentId: string) => {
-      const newId = `node-${Date.now()}`
       const forwardKey = neighborKey(dir)
       const backKey = neighborKey(opposite(dir))
+      const branchKey = branchListKey(dir)
+      const newId = `node-${Date.now()}`
       const embedUrl = buildVideoUrl(move.id)
 
       setNodes((prev) => {
         const parent = prev[parentId]
-        if (!parent || parent[forwardKey]) return prev
+        if (!parent) return prev
         if (parent.type === "Submission" || parent.stage === 4) return prev
+
+        const branchList = parent[branchKey] ? [...parent[branchKey]!] : []
+        const existingForward = parent[forwardKey] as string | undefined
+        if (existingForward && !branchList.includes(existingForward)) branchList.unshift(existingForward)
+        branchList.push(newId)
 
         return {
           ...prev,
-          [parentId]: { ...parent, [forwardKey]: newId },
+          [parentId]: { ...parent, [forwardKey]: branchList[0], [branchKey]: branchList },
           [newId]: {
             id: newId,
             title: move.name,
@@ -388,7 +441,7 @@ export default function Index() {
 
       setCurrentId(newId)
     },
-    [],
+    [setNodes, setCurrentId],
   )
 
   const handleMovePicked = (move: BJJNode) => {
@@ -530,6 +583,126 @@ export default function Index() {
           />
         )}
       </View>
+    )
+  }
+
+  const renderFullCard = (node: Node, customHeight?: number) => (
+    <View
+      style={{
+        width: cardWidth,
+        height: customHeight ?? cardHeight,
+        borderRadius: 16,
+        overflow: "hidden",
+        backgroundColor: "#111827",
+        borderWidth: 1,
+        borderColor: "#f97316",
+      }}
+    >
+      {renderCard(node)}
+
+      <View
+        style={{
+          padding: 16,
+          borderTopWidth: 1,
+          borderTopColor: "rgba(249,115,22,0.35)",
+          backgroundColor: "#0f172a",
+          gap: 8,
+        }}
+      >
+        <Text
+          style={{
+            color: "#f8fafc",
+            fontSize: 20,
+            fontWeight: "700",
+          }}
+          numberOfLines={2}
+        >
+          {node.title}
+        </Text>
+        <Text style={{ color: "#94a3b8", fontSize: 16 }}>
+          Axis: {axis.toUpperCase()} (swipe only where nodes exist)
+        </Text>
+        {!!node.group && (
+          <Text style={{ color: "#cbd5e1", fontSize: 14 }}>
+            {node.group} {node.stage ? `- Stage ${node.stage}` : ""}
+          </Text>
+        )}
+        {!!node.type && (
+          <Text style={{ color: "#cbd5e1", fontSize: 14 }}>
+            Type: {node.type}
+          </Text>
+        )}
+        {!!node.notes && (
+          <Text style={{ color: "#94a3b8", fontSize: 13 }} numberOfLines={3}>
+            {node.notes}
+          </Text>
+        )}
+      </View>
+    </View>
+  )
+
+  const renderMiniCard = (node: Node) => {
+    const videoId = extractYouTubeId(node.videoUrl)
+    const thumbnail = videoId ? `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg` : null
+    return (
+      <Pressable
+        key={node.id}
+        onPress={() => {
+          setNodes((prev) => {
+            const child = prev[node.id]
+            if (!child) return prev
+
+            const parentId = child.left as string | undefined
+            if (!parentId) return prev
+
+            const parent = prev[parentId]
+            if (!parent) return prev
+
+            const branchKey: BranchKey = "rightBranches"
+            const currentList = parent[branchKey] ? [...parent[branchKey]!] : []
+            const filtered = currentList.filter((id) => id !== node.id)
+            const nextList = [node.id, ...filtered]
+
+            return {
+              ...prev,
+              [parentId]: {
+                ...parent,
+                right: node.id,
+                [branchKey]: nextList,
+              },
+            }
+          })
+
+          setCurrentId(node.id)
+          setBranchPickerFor(null)
+          completeMove()
+        }}
+        style={{
+          width: 140,
+          height: 90,
+          borderRadius: 12,
+          overflow: "hidden",
+          borderWidth: 1,
+          borderColor: "rgba(249,115,22,0.6)",
+          backgroundColor: "#0f172a",
+        }}
+      >
+        {thumbnail ? (
+          <Image source={{ uri: thumbnail }} style={{ width: "100%", height: 60 }} resizeMode="cover" />
+        ) : (
+          <View style={{ width: "100%", height: 60, backgroundColor: "#111827" }} />
+        )}
+        <View style={{ paddingHorizontal: 8, paddingVertical: 6 }}>
+          <Text style={{ color: "#f8fafc", fontSize: 12, fontWeight: "700" }} numberOfLines={1}>
+            {node.title}
+          </Text>
+          {!!node.group && (
+            <Text style={{ color: "#94a3b8", fontSize: 11 }} numberOfLines={1}>
+              {node.group}
+            </Text>
+          )}
+        </View>
+      </Pressable>
     )
   }
 
@@ -750,70 +923,80 @@ export default function Index() {
                       </Text>
                     </Pressable>
                   )}
-                  {visibleCards.map(({ id, offsetX, offsetY }) => {
-                    const node = nodes[id]
-                    if (!node) return null
 
-                    return (
-                      <View
-                        key={id}
-                        style={{
-                          position: "absolute",
-                          left: offsetX,
-                          top: offsetY,
-                          width: cardWidth,
-                          height: cardHeight,
-                          zIndex: id === currentId ? 2 : 1,
-                          borderRadius: 16,
-                          overflow: "hidden",
-                          backgroundColor: "#111827",
-                          borderWidth: 1,
-                          borderColor: "#f97316",
-                        }}
-                      >
-                        {renderCard(node)}
+                  {branchPickerFor && rightBranchRootNode && rightBranchNodes.length > 1 ? (
+                    <View
+                      style={{
+                        flex: 1,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: cardWidth,
+                        gap: 16,
+                      }}
+                    >
+                      {rightBranchNodes.map((node) => {
+                        const pickerCardHeight = cardHeight / rightBranchNodes.length
+                        return (
+                        <Pressable
+                          key={node.id}
+                          onPress={() => {
+                            setNodes((prev) => {
+                              const child = prev[node.id]
+                              if (!child) return prev
 
-                        <View
-                          style={{
-                            padding: 16,
-                            borderTopWidth: 1,
-                            borderTopColor: "rgba(249,115,22,0.35)",
-                            backgroundColor: "#0f172a",
-                            gap: 8,
+                              const parentId = child.left as string | undefined
+                              if (!parentId) return prev
+
+                              const parent = prev[parentId]
+                              if (!parent) return prev
+
+                              const branchKey: BranchKey = "rightBranches"
+                              const currentList = parent[branchKey] ? [...parent[branchKey]!] : []
+                              const filtered = currentList.filter((id) => id !== node.id)
+                              const nextList = [node.id, ...filtered]
+
+                              return {
+                                ...prev,
+                                [parentId]: {
+                                  ...parent,
+                                  right: node.id,
+                                  [branchKey]: nextList,
+                                },
+                              }
+                            })
+
+                            setCurrentId(node.id)
+                            setBranchPickerFor(null)
+                            completeMove()
                           }}
                         >
-                          <Text
+                          {renderFullCard(node, pickerCardHeight)}
+                        </Pressable>
+                        )
+                      })}
+                    </View>
+                  ) : (
+                    <>
+                      {visibleCards.map(({ id, offsetX, offsetY }) => {
+                        const node = nodes[id]
+                        if (!node) return null
+
+                        return (
+                          <View
+                            key={id}
                             style={{
-                              color: "#f8fafc",
-                              fontSize: 20,
-                              fontWeight: "700",
+                              position: "absolute",
+                              left: offsetX,
+                              top: offsetY,
+                              zIndex: id === currentId ? 2 : 1,
                             }}
-                            numberOfLines={2}
                           >
-                            {node.title}
-                          </Text>
-                          <Text style={{ color: "#94a3b8", fontSize: 16 }}>
-                            Axis: {axis.toUpperCase()} (swipe only where nodes exist)
-                          </Text>
-                          {!!node.group && (
-                            <Text style={{ color: "#cbd5e1", fontSize: 14 }}>
-                              {node.group} {node.stage ? `- Stage ${node.stage}` : ""}
-                            </Text>
-                          )}
-                          {!!node.type && (
-                            <Text style={{ color: "#cbd5e1", fontSize: 14 }}>
-                              Type: {node.type}
-                            </Text>
-                          )}
-                          {!!node.notes && (
-                            <Text style={{ color: "#94a3b8", fontSize: 13 }} numberOfLines={3}>
-                              {node.notes}
-                            </Text>
-                          )}
-                        </View>
-                      </View>
-                    )
-                  })}
+                            {renderFullCard(node)}
+                          </View>
+                        )
+                      })}
+                    </>
+                  )}
                 </View>
 
                 {hasLeft && (

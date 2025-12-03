@@ -60,16 +60,6 @@ function TabsLayout() {
           ),
         }}
       />
-      <Tabs.Screen
-        name="tabs/overview"
-        options={{
-          title: "Overview",
-          tabBarLabel: "Overview",
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="account-tree" size={size} color={color} />
-          ),
-        }}
-      />
       {/* Hide helper/redirect routes from the tab bar */}
       <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen name="BjjData" options={{ href: null }} />
