@@ -28,11 +28,37 @@ import {
 } from "../gameSaves"
 import MovesMenue from "../MovesMenue"
 import { moveVideoMap, toYouTubeEmbedWithParams } from "../TechniqueVideo"
-import { branchListKey, BranchKey, collectDescendants, Direction, getBranchList, neighborKey, opposite } from "./utils/graph"
+import {
+  branchListKey,
+  BranchKey,
+  Direction,
+  getBranchList,
+  neighborKey,
+  opposite,
+} from "./utils/graph"
 
 export type Axis = "x" | "y"
 
 const buildEmbedUrl = (id: string) => `https://www.youtube.com/embed/${id}?rel=0&playsinline=1`
+
+const extractYouTubeId = (raw?: string | null) => {
+  if (!raw) return null
+  // direct id
+  if (/^[a-zA-Z0-9_-]{6,}$/.test(raw) && !raw.includes("/")) return raw
+  // youtu.be/<id>
+  const short = /youtu\.be\/([a-zA-Z0-9_-]{6,})/.exec(raw)
+  if (short?.[1]) return short[1]
+  // watch?v=<id>
+  const watch = /[?&]v=([a-zA-Z0-9_-]{6,})/.exec(raw)
+  if (watch?.[1]) return watch[1]
+  // shorts/<id>
+  const shorts = /shorts\/([a-zA-Z0-9_-]{6,})/.exec(raw)
+  if (shorts?.[1]) return shorts[1]
+  // embed/<id>
+  const embed = /embed\/([a-zA-Z0-9_-]{6,})/.exec(raw)
+  if (embed?.[1]) return embed[1]
+  return null
+}
 
 const buildVideoUrl = (moveId?: string | null) => {
   if (!moveId) return null
@@ -114,7 +140,8 @@ export default function Index() {
 
   const getNeighborId = useCallback(
     (dir: Direction) => {
-      return getBranchList(nodes[currentId], dir)[0]
+      const ids = getBranchList(nodes[currentId], dir).filter((id) => Boolean(nodes[id]))
+      return ids[0]
     },
     [currentId, nodes],
   )
@@ -136,6 +163,7 @@ export default function Index() {
 
   const currentNode = nodes[currentId]
   const isTerminal = currentNode?.type === "Submission" || currentNode?.stage === 4
+
   const rightBranchRootNode = useMemo(() => {
     if (!branchPickerFor) return undefined
     return nodes[branchPickerFor]
@@ -324,12 +352,20 @@ export default function Index() {
   const handleDelete = useCallback(
     (nodeId: string) => {
       if (nodeId === rootId) return
+
       const branchToDir: Record<BranchKey, Direction> = {
         leftBranches: "left",
         rightBranches: "right",
         upBranches: "up",
         downBranches: "down",
       }
+
+      // Figure out parent using back links on the node snapshot we have now
+      const targetSnapshot = nodes[nodeId]
+      const parentCandidate: string | null =
+        (targetSnapshot?.left as string | undefined) ??
+        (targetSnapshot?.up as string | undefined) ??
+        null
 
       let removed = new Set<string>()
       let nextFocus: string | null = null
@@ -338,16 +374,42 @@ export default function Index() {
         const target = prev[nodeId]
         if (!target) return prev
 
+        // Build a descendant set manually, never walking back into parentCandidate
         const toRemove = new Set<string>()
-        const stack = [nodeId]
+        const stack: string[] = [nodeId]
 
-        collectDescendants(nodeId, prev).forEach((id) => toRemove.add(id))
+        while (stack.length) {
+          const id = stack.pop()!
+          if (toRemove.has(id)) continue
+          toRemove.add(id)
+
+          const node = prev[id]
+          if (!node) continue
+
+          ;(["left", "right", "up", "down"] as Direction[]).forEach((dir) => {
+            const ref = node[dir] as string | undefined
+            if (ref && ref !== parentCandidate && !toRemove.has(ref)) {
+              stack.push(ref)
+            }
+          })
+
+          ;(["leftBranches", "rightBranches", "upBranches", "downBranches"] as BranchKey[]).forEach((bk) => {
+            const list = node[bk]
+            if (!list) return
+            list.forEach((childId) => {
+              if (childId !== parentCandidate && !toRemove.has(childId)) {
+                stack.push(childId)
+              }
+            })
+          })
+        }
 
         removed = toRemove
 
         const newNodes: Record<string, Node> = { ...prev }
         toRemove.forEach((id) => delete newNodes[id])
 
+        // Clean up pointers in survivors
         for (const [id, node] of Object.entries(newNodes)) {
           let updated = node
 
@@ -391,10 +453,17 @@ export default function Index() {
       setMenuDirection(null)
       setMenuParentId(null)
       setBranchPickerFor(null)
-      setCurrentId(nextFocus ?? rootId)
+
+      const focusId = (() => {
+        if (parentCandidate && !removed.has(parentCandidate)) return parentCandidate
+        if (nextFocus && !removed.has(nextFocus)) return nextFocus
+        return rootId
+      })()
+
+      setCurrentId(focusId)
       completeMove()
     },
-    [completeMove, rootId, setCurrentId, setNodes],
+    [completeMove, rootId, setCurrentId, setNodes, nodes],
   )
 
   const stageTransform = [{ translateX }, { translateY }]
@@ -536,7 +605,6 @@ export default function Index() {
 
   const handleCreateSave = useCallback(
     async (name: string) => {
-      // Start from a blank flow when creating a new save.
       resetToBlankFlow()
       const blankNodes = {
         [rootId]: {
@@ -684,260 +752,265 @@ export default function Index() {
               }}
             >
               <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-              <Animated.View
-                style={{
-                  width: outerWidth,
-                  height: outerHeight,
-                  position: "relative",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 20,
-                  borderWidth: 2,
-                  padding: 12,
-                  overflow: "visible",
-                  transform: stageTransform,
-                }}
-              >
-                <View style={{ width: cardWidth, height: cardHeight, position: "relative" }}>
-                  {!nodes[currentId]?.moveId && Object.keys(nodes).length === 1 && (
-                    <Pressable
-                      onPress={() => openMoveMenu()}
+                <Animated.View
+                  style={{
+                    width: outerWidth,
+                    height: outerHeight,
+                    position: "relative",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 20,
+                    borderWidth: 2,
+                    padding: 12,
+                    overflow: "visible",
+                    transform: stageTransform,
+                  }}
+                >
+                  <View style={{ width: cardWidth, height: cardHeight, position: "relative" }}>
+                    {!nodes[currentId]?.moveId && Object.keys(nodes).length === 1 && (
+                      <Pressable
+                        onPress={() => openMoveMenu()}
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          top: 0,
+                          width: cardWidth,
+                          height: cardHeight,
+                          borderRadius: 16,
+                          borderWidth: 1.5,
+                          borderStyle: "dashed",
+                          borderColor: "#f97316",
+                          backgroundColor: "rgba(249,115,22,0.08)",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          zIndex: 5,
+                        }}
+                      >
+                        <Text style={{ color: "#f97316", fontWeight: "800", marginBottom: 6 }}>
+                          Start Here
+                        </Text>
+                        <Text
+                          style={{
+                            color: "rgba(249,115,22,0.9)",
+                            fontSize: 12,
+                            textAlign: "center",
+                            paddingHorizontal: 12,
+                          }}
+                        >
+                          Pick your first move to open the menu.
+                        </Text>
+                      </Pressable>
+                    )}
+
+                    {branchPickerFor && rightBranchRootNode && rightBranchNodes.length > 1 ? (
+                      <BranchPicker
+                        parentId={branchPickerFor}
+                        branchNodes={rightBranchNodes}
+                        nodes={nodes}
+                        cardWidth={cardWidth}
+                        cardHeight={cardHeight}
+                        axis={axis}
+                        playingIds={playingIds}
+                        setPlayingIds={setPlayingIds}
+                        setNodes={setNodes}
+                        setCurrentId={setCurrentId}
+                        setBranchPickerFor={setBranchPickerFor}
+                        completeMove={completeMove}
+                        showBackArrow={Boolean(branchPickerFor)}
+                      />
+                    ) : (
+                      <>
+                        {visibleCards.map(({ id, offsetX, offsetY }) => {
+                          const node = nodes[id]
+                          if (!node) return null
+
+                          return (
+                            <View
+                              key={id}
+                              style={{
+                                position: "absolute",
+                                left: offsetX,
+                                top: offsetY,
+                                width: cardWidth,
+                                height: cardHeight,
+                                zIndex: id === currentId ? 2 : 1,
+                              }}
+                            >
+                              <FlowCard
+                                node={node}
+                                cardWidth={cardWidth}
+                                cardHeight={cardHeight}
+                                axis={axis}
+                                playingIds={playingIds}
+                                setPlayingIds={setPlayingIds}
+                              />
+                            </View>
+                          )
+                        })}
+                      </>
+                    )}
+                  </View>
+
+                  <View
+                    style={{
+                      position: "absolute",
+                      zIndex: 60,
+                      elevation: 60,
+                      right: 4,
+                      top: outerHeight / 2 - 18,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {hasRight && !branchPickerFor ? (
+                      <View pointerEvents="none">
+                        <MaterialIcons name="arrow-forward-ios" size={24} color="rgba(148,163,184,0.85)" />
+                      </View>
+                    ) : (
+                      <View />
+                    )}
+
+                    {branchPickerFor || isTerminal || (!currentNode?.moveId && Object.keys(nodes).length === 1) ? (
+                      <View pointerEvents="none" style={{ width: 34, height: 34, marginTop: 6 }} />
+                    ) : (
+                      <Pressable
+                        onPress={() => openMoveMenu("right")}
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: 17,
+                          alignItems: "center",
+                          justifyContent: "center",
+                          marginTop: 6,
+                        }}
+                        hitSlop={10}
+                      >
+                        <MaterialCommunityIcons
+                          name="source-branch-plus"
+                          size={24}
+                          color="rgba(148,163,184,0.9)"
+                        />
+                      </Pressable>
+                    )}
+                  </View>
+
+                  {hasLeft && !branchPickerFor && (
+                    <View
+                      pointerEvents="none"
                       style={{
                         position: "absolute",
-                        left: 0,
-                        top: 0,
-                        width: cardWidth,
-                        height: cardHeight,
-                        borderRadius: 16,
-                        borderWidth: 1.5,
-                        borderStyle: "dashed",
-                        borderColor: "#f97316",
-                        backgroundColor: "rgba(249,115,22,0.08)",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        zIndex: 5,
+                        zIndex: 50,
+                        elevation: 50,
+                        left: 4,
+                        top: outerHeight / 2 - 12,
                       }}
                     >
-                      <Text style={{ color: "#f97316", fontWeight: "800", marginBottom: 6 }}>
-                        Start Here
-                      </Text>
-                      <Text style={{ color: "rgba(249,115,22,0.9)", fontSize: 12, textAlign: "center", paddingHorizontal: 12 }}>
-                        Pick your first move to open the menu.
-                      </Text>
-                    </Pressable>
-                  )}
-
-                  {branchPickerFor && rightBranchRootNode && rightBranchNodes.length > 1 ? (
-                    <BranchPicker
-                      parentId={branchPickerFor}
-                      branchNodes={rightBranchNodes}
-                      nodes={nodes}
-                      cardWidth={cardWidth}
-                      cardHeight={cardHeight}
-                      axis={axis}
-                      playingIds={playingIds}
-                      setPlayingIds={setPlayingIds}
-                      setNodes={setNodes}
-                      setCurrentId={setCurrentId}
-                      setBranchPickerFor={setBranchPickerFor}
-                      completeMove={completeMove}
-                      showBackArrow={Boolean(branchPickerFor)}
-                    />
-                  ) : (
-                    <>
-                      {visibleCards.map(({ id, offsetX, offsetY }) => {
-                        const node = nodes[id]
-                        if (!node) return null
-
-                        return (
-                          <View
-                            key={id}
-                            style={{
-                              position: "absolute",
-                              left: offsetX,
-                              top: offsetY,
-                              width: cardWidth,
-                              height: cardHeight,
-                              zIndex: id === currentId ? 2 : 1,
-                            }}
-                          >
-                            <FlowCard
-                              node={node}
-                              cardWidth={cardWidth}
-                              cardHeight={cardHeight}
-                              axis={axis}
-                              playingIds={playingIds}
-                              setPlayingIds={setPlayingIds}
-                            />
-                          </View>
-                        )
-                      })}
-                    </>
-                  )}
-                </View>
-
-                <View
-                  style={{
-                    position: "absolute",
-                    zIndex: 60,
-                    elevation: 60,
-                    right: 4,
-                    top: outerHeight / 2 - 18,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {/* Arrow line (if branch exists) */}
-                  {hasRight && !branchPickerFor ? (
-                    <View pointerEvents="none">
-                      <MaterialIcons name="arrow-forward-ios" size={24} color="rgba(148,163,184,0.85)" />
+                      <MaterialIcons name="arrow-back-ios" size={24} color="rgba(148,163,184,0.85)" />
                     </View>
-                  ) : (
-                    <View />
                   )}
 
-                  {/* Plus stays visible even after a branch exists (unless terminal/empty) */}
-                  {branchPickerFor || isTerminal || (!currentNode?.moveId && Object.keys(nodes).length === 1) ? (
-                    <View pointerEvents="none" style={{ width: 34, height: 34, marginTop: 6 }} />
-                  ) : (
-                    <Pressable
-                      onPress={() => openMoveMenu("right")}
-                      style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 17,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginTop: 6,
-                      }}
-                      hitSlop={10}
-                    >
-                      <MaterialCommunityIcons
-                        name="source-branch-plus"
-                        size={24}
-                        color="rgba(148,163,184,0.9)"
-                      />
-                    </Pressable>
-                  )}
-                </View>
-
-                {hasLeft && !branchPickerFor && (
                   <View
-                    pointerEvents="none"
                     style={{
                       position: "absolute",
-                      zIndex: 50,
-                      elevation: 50,
-                      left: 4,
-                      top: outerHeight / 2 - 12,
+                      zIndex: 60,
+                      elevation: 60,
+                      left: outerWidth / 2 - 16,
+                      bottom: 0,
+                      width: 32,
+                      height: 32,
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
                   >
-                    <MaterialIcons name="arrow-back-ios" size={24} color="rgba(148,163,184,0.85)" />
+                    {branchPickerFor ? (
+                      <View pointerEvents="none" style={{ width: 32, height: 32 }} />
+                    ) : hasDown ? (
+                      <View pointerEvents="none">
+                        <MaterialIcons name="arrow-downward" size={24} color="rgba(148,163,184,0.85)" />
+                      </View>
+                    ) : isTerminal ? (
+                      <View pointerEvents="none" style={{ width: 32, height: 32 }} />
+                    ) : !currentNode?.moveId && Object.keys(nodes).length === 1 ? (
+                      <View pointerEvents="none" style={{ width: 32, height: 32 }} />
+                    ) : (
+                      <Pressable
+                        onPress={() => openMoveMenu("down")}
+                        style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: 16,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                        hitSlop={10}
+                      >
+                        <FontAwesome6 name="plus" size={20} color="rgba(148,163,184,0.85)" />
+                      </Pressable>
+                    )}
                   </View>
-                )}
 
-                <View
-                  style={{
-                    position: "absolute",
-                    zIndex: 60,
-                    elevation: 60,
-                    left: outerWidth / 2 - 16,
-                    bottom: 0,
-                    width: 32,
-                    height: 32,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {branchPickerFor ? (
-                    <View pointerEvents="none" style={{ width: 32, height: 32 }} />
-                  ) : hasDown ? (
-                    <View pointerEvents="none">
-                      <MaterialIcons name="arrow-downward" size={24} color="rgba(148,163,184,0.85)" />
-                    </View>
-                  ) : isTerminal ? (
-                    <View pointerEvents="none" style={{ width: 32, height: 32 }} />
-                  ) : !currentNode?.moveId && Object.keys(nodes).length === 1 ? (
-                    <View pointerEvents="none" style={{ width: 32, height: 32 }} />
-                  ) : (
-                    <Pressable
-                      onPress={() => openMoveMenu("down")}
+                  {hasUp && !branchPickerFor && (
+                    <View
+                      pointerEvents="none"
                       style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: 16,
-                        alignItems: "center",
-                        justifyContent: "center",
+                        position: "absolute",
+                        zIndex: 50,
+                        elevation: 50,
+                        left: outerWidth / 2 - 12,
+                        top: 4,
                       }}
-                      hitSlop={10}
                     >
-                      <FontAwesome6 name="plus" size={20} color="rgba(148,163,184,0.85)" />
-                    </Pressable>
+                      <MaterialIcons name="arrow-upward" size={24} color="rgba(148,163,184,0.85)" />
+                    </View>
                   )}
-                </View>
 
-                {hasUp && !branchPickerFor && (
                   <View
-                    pointerEvents="none"
                     style={{
                       position: "absolute",
-                      zIndex: 50,
-                      elevation: 50,
-                      left: outerWidth / 2 - 12,
-                      top: 4,
+                      zIndex: 60,
+                      elevation: 60,
+                      right: 60,
+                      bottom: -2,
+                      width: 36,
+                      height: 36,
+                      alignItems: "center",
+                      justifyContent: "center",
                     }}
                   >
-                    <MaterialIcons name="arrow-upward" size={24} color="rgba(148,163,184,0.85)" />
+                    {branchPickerFor ? (
+                      <View pointerEvents="none" style={{ width: 36, height: 36 }} />
+                    ) : currentId !== rootId && !isTerminal ? (
+                      <Pressable
+                        onPress={() => handleDelete(currentId)}
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 18,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                        hitSlop={10}
+                      >
+                        <MaterialCommunityIcons name="delete-forever-outline" size={20} color="#ef4444" />
+                      </Pressable>
+                    ) : (
+                      <View pointerEvents="none" style={{ width: 36, height: 36 }} />
+                    )}
                   </View>
-                )}
-
-                <View
-                  style={{
-                    position: "absolute",
-                    zIndex: 60,
-                    elevation: 60,
-                    right: 60,
-                    bottom: -2,
-                    width: 36,
-                    height: 36,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {branchPickerFor ? (
-                    <View pointerEvents="none" style={{ width: 36, height: 36 }} />
-                  ) : currentId !== rootId && !isTerminal ? (
-                    <Pressable
-                      onPress={() => handleDelete(currentId)}
-                      style={{
-                        width: 36,
-                        height: 36,
-                        borderRadius: 18,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                      hitSlop={10}
-                    >
-                      <MaterialCommunityIcons name="delete-forever-outline" size={20} color="#ef4444" />
-                    </Pressable>
-                  ) : (
-                    <View pointerEvents="none" style={{ width: 36, height: 36 }} />
-                  )}
-                </View>
-              </Animated.View>
+                </Animated.View>
+              </View>
             </View>
-          </View>
 
-          <MovesMenue
-            visible={menuVisible}
-            moves={availableMoves}
-            onClose={() => {
-              setMenuVisible(false)
-              setMenuDirection(null)
-              setMenuParentId(null)
-            }}
-            onSelectMove={handleMovePicked}
-          />
+            <MovesMenue
+              visible={menuVisible}
+              moves={availableMoves}
+              onClose={() => {
+                setMenuVisible(false)
+                setMenuDirection(null)
+                setMenuParentId(null)
+              }}
+              onSelectMove={handleMovePicked}
+            />
           </View>
         </PanGestureHandler>
       </View>
