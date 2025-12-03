@@ -1,5 +1,6 @@
 ﻿import FontAwesome6 from "@expo/vector-icons/FontAwesome6"
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
+import FontAwesome5 from "@expo/vector-icons/FontAwesome5"
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { BlurView } from "expo-blur"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
@@ -466,6 +467,12 @@ export default function Index() {
     [completeMove, rootId, setCurrentId, setNodes, nodes],
   )
 
+  // 🔹 Simple placeholder undo handler so the icon works
+  const handleUndo = useCallback(() => {
+    // TODO: implement real undo with a history stack
+    console.log("Undo pressed (not implemented yet)")
+  }, [])
+
   const stageTransform = [{ translateX }, { translateY }]
 
   const outerWidth = cardWidth + horizontalGap * 2
@@ -707,8 +714,7 @@ export default function Index() {
   // Can we show a delete button for the current node?
   const canDeleteCurrent =
     !branchPickerFor &&
-    ((currentId !== rootId && !isTerminal) ||
-      (currentId === rootId && rootHasFlow))
+    ((currentId !== rootId && !isTerminal) || (currentId === rootId && rootHasFlow))
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -741,12 +747,22 @@ export default function Index() {
             </BlurView>
           </View>
 
-          <View style={{ overflow: "hidden", borderRadius: 12 }}>
-            <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
-              <Pressable onPress={handleGoToRoot} style={{ padding: 4, borderRadius: 999 }}>
-                <MaterialCommunityIcons name="image-filter-center-focus-weak" size={20} color="#f8fafc" />
-              </Pressable>
-            </BlurView>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View style={{ overflow: "hidden", borderRadius: 12 }}>
+              <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
+                <Pressable onPress={handleUndo} style={{ padding: 4, borderRadius: 999 }}>
+                  <FontAwesome5 name="undo-alt" size={20} color="#f5f5f5" />
+                </Pressable>
+              </BlurView>
+            </View>
+
+            <View style={{ overflow: "hidden", borderRadius: 12 }}>
+              <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
+                <Pressable onPress={handleGoToRoot} style={{ padding: 4, borderRadius: 999 }}>
+                  <MaterialCommunityIcons name="image-filter-center-focus-weak" size={20} color="#f8fafc" />
+                </Pressable>
+              </BlurView>
+            </View>
           </View>
         </View>
 
@@ -923,11 +939,12 @@ export default function Index() {
                     </View>
                   )}
 
-                  <View
-                    style={{
-                      position: "absolute",
-                      zIndex: 60,
-                      elevation: 60,
+                  {/* Undo button */}
+                <View
+                  style={{
+                    position: "absolute",
+                    zIndex: 60,
+                    elevation: 60,
                       left: outerWidth / 2 - 16,
                       bottom: 0,
                       width: 32,
