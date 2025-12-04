@@ -1,7 +1,9 @@
-﻿import FontAwesome6 from "@expo/vector-icons/FontAwesome6"
+﻿import FontAwesome5 from "@expo/vector-icons/FontAwesome5"
+import FontAwesome6 from "@expo/vector-icons/FontAwesome6"
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { BlurView } from "expo-blur"
+import { useRouter } from "expo-router"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Animated, Dimensions, Easing, Pressable, Text, View } from "react-native"
 import {
@@ -10,12 +12,9 @@ import {
   type PanGestureHandlerGestureEvent,
 } from "react-native-gesture-handler"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
-import { useRouter } from "expo-router"
 import type { BJJNode } from "../BjjData"
 import { bjjData } from "../BjjData"
 import { useFlow, type Node } from "../FlowStore"
-import { FlowCard } from "./components/FlowCard"
-import { BranchPicker } from "./components/BranchPicker"
 import GameLobby from "../GameLobby"
 import {
   createGameSave,
@@ -28,9 +27,11 @@ import {
 } from "../gameSaves"
 import MovesMenue from "../MovesMenue"
 import { moveVideoMap, toYouTubeEmbedWithParams } from "../TechniqueVideo"
+import { BranchPicker } from "./components/BranchPicker"
+import { FlowCard } from "./components/FlowCard"
 import {
-  branchListKey,
   BranchKey,
+  branchListKey,
   Direction,
   getBranchList,
   neighborKey,
@@ -78,6 +79,10 @@ export default function Index() {
   const insets = useSafeAreaInsets()
   const lastSyncedRef = useRef<string | null>(null)
 
+  // history for undo
+  const nodesHistoryRef = useRef<Array<{ nodes: Record<string, Node>; currentId: string }>>([])
+  const isUndoRef = useRef(false)
+
   const resetToBlankFlow = useCallback(() => {
     const blank: Node = {
       id: rootId,
@@ -97,6 +102,8 @@ export default function Index() {
     setCurrentId(rootId)
     setPlayingIds({})
     lastSyncedRef.current = null
+    // reset history as well
+    nodesHistoryRef.current = [{ nodes: { [rootId]: blank }, currentId: rootId }]
   }, [rootId, setNodes, setCurrentId])
 
   const [menuVisible, setMenuVisible] = useState(false)
@@ -273,7 +280,7 @@ export default function Index() {
         completeMove()
       })
     },
-    [completeMove, distanceX, distanceY, timing, translateX, translateY],
+    [completeMove, distanceX, distanceY, timing, translateX, translateY, setCurrentId],
   )
 
   const handleGestureEnd = useCallback(
@@ -360,7 +367,6 @@ export default function Index() {
         downBranches: "down",
       }
 
-      // Figure out parent using back links on the node snapshot we have now
       const targetSnapshot = nodes[nodeId]
       const parentCandidate: string | null =
         (targetSnapshot?.left as string | undefined) ??
@@ -374,7 +380,6 @@ export default function Index() {
         const target = prev[nodeId]
         if (!target) return prev
 
-        // Build a descendant set manually, never walking back into parentCandidate
         const toRemove = new Set<string>()
         const stack: string[] = [nodeId]
 
@@ -409,7 +414,6 @@ export default function Index() {
         const newNodes: Record<string, Node> = { ...prev }
         toRemove.forEach((id) => delete newNodes[id])
 
-        // Clean up pointers in survivors
         for (const [id, node] of Object.entries(newNodes)) {
           let updated = node
 
@@ -466,6 +470,22 @@ export default function Index() {
     [completeMove, rootId, setCurrentId, setNodes, nodes],
   )
 
+  const handleUndo = useCallback(() => {
+    const history = nodesHistoryRef.current
+    if (history.length < 2) {
+      return
+    }
+
+    // drop current snapshot
+    history.pop()
+    const prev = history[history.length - 1]
+    if (!prev) return
+
+    isUndoRef.current = true
+    setNodes(prev.nodes)
+    setCurrentId(prev.currentId)
+  }, [setNodes, setCurrentId])
+
   const stageTransform = [{ translateX }, { translateY }]
 
   const outerWidth = cardWidth + horizontalGap * 2
@@ -489,7 +509,6 @@ export default function Index() {
     return list
   }, [currentId, distanceX, distanceY, getNeighborId])
 
-  // Root has something to "clear" if it has a move OR there are extra nodes in the graph
   const rootHasFlow = useMemo(() => {
     const rootNode = nodes[rootId]
     if (!rootNode) return false
@@ -595,6 +614,21 @@ export default function Index() {
     loadSavesFromStorage()
   }, [loadSavesFromStorage])
 
+  // history tracking for undo
+  useEffect(() => {
+    if (isUndoRef.current) {
+      isUndoRef.current = false
+      return
+    }
+
+    const snapNodes = JSON.parse(JSON.stringify(nodes)) as Record<string, Node>
+
+    nodesHistoryRef.current = [
+      ...nodesHistoryRef.current,
+      { nodes: snapNodes, currentId },
+    ].slice(-30)
+  }, [nodes, currentId])
+
   // Load last autosave if present.
   useEffect(() => {
     let cancelled = false
@@ -604,6 +638,8 @@ export default function Index() {
       setNodes(snapshot.nodes)
       setCurrentId(snapshot.currentId || rootId)
       setShowLobby(false)
+      // initialise history with loaded snapshot
+      nodesHistoryRef.current = [{ nodes: snapshot.nodes, currentId: snapshot.currentId || rootId }]
     }
     load()
     return () => {
@@ -649,6 +685,7 @@ export default function Index() {
       setCurrentId(target.currentId || rootId)
       setActiveSaveId(id)
       setShowLobby(false)
+      nodesHistoryRef.current = [{ nodes: target.nodes, currentId: target.currentId || rootId }]
     },
     [rootId, saves, setNodes, setCurrentId, setShowLobby],
   )
@@ -704,11 +741,9 @@ export default function Index() {
     )
   }
 
-  // Can we show a delete button for the current node?
   const canDeleteCurrent =
     !branchPickerFor &&
-    ((currentId !== rootId && !isTerminal) ||
-      (currentId === rootId && rootHasFlow))
+    ((currentId !== rootId) || (currentId === rootId && rootHasFlow))
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -741,12 +776,22 @@ export default function Index() {
             </BlurView>
           </View>
 
-          <View style={{ overflow: "hidden", borderRadius: 12 }}>
-            <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
-              <Pressable onPress={handleGoToRoot} style={{ padding: 4, borderRadius: 999 }}>
-                <MaterialCommunityIcons name="image-filter-center-focus-weak" size={20} color="#f8fafc" />
-              </Pressable>
-            </BlurView>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View style={{ overflow: "hidden", borderRadius: 12 }}>
+              <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
+                <Pressable onPress={handleUndo} style={{ padding: 4, borderRadius: 999 }}>
+                  <FontAwesome5 name="undo-alt" size={20} color="#f5f5f5" />
+                </Pressable>
+              </BlurView>
+            </View>
+
+            <View style={{ overflow: "hidden", borderRadius: 12 }}>
+              <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
+                <Pressable onPress={handleGoToRoot} style={{ padding: 4, borderRadius: 999 }}>
+                  <MaterialCommunityIcons name="image-filter-center-focus-weak" size={20} color="#f8fafc" />
+                </Pressable>
+              </BlurView>
+            </View>
           </View>
         </View>
 
