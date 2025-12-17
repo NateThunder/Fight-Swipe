@@ -1,13 +1,15 @@
 import React, { createContext, useContext, useMemo, useState } from "react"
 import type { MoveType, StageId } from "./BjjData"
 import { bjjData } from "./BjjData"
-import { moveVideoMap, toYouTubeEmbedWithParams } from "./TechniqueVideo"
+import type { AVPlaybackSource } from "expo-av"
+import { moveVideoMap } from "./TechniqueVideo"
 
 export type Node = {
   id: string
   title: string
   moveId?: string
-  videoUrl?: string
+  videoUrl?: AVPlaybackSource | string
+  thumbnail?: AVPlaybackSource | { uri: string }
   group?: string
   type?: MoveType
   stage?: StageId
@@ -19,29 +21,10 @@ export type Node = {
 }
 
 const ROOT_ID = "root"
-const buildEmbedUrl = (id: string) => `https://www.youtube.com/embed/${id}?rel=0&playsinline=1`
-
-const extractYouTubeId = (raw?: string | null) => {
-  if (!raw) return null
-  if (/^[a-zA-Z0-9_-]{6,}$/.test(raw) && !raw.includes("/")) return raw
-  const short = /youtu\.be\/([a-zA-Z0-9_-]{6,})/.exec(raw)
-  if (short?.[1]) return short[1]
-  const watch = /[?&]v=([a-zA-Z0-9_-]{6,})/.exec(raw)
-  if (watch?.[1]) return watch[1]
-  const shorts = /shorts\/([a-zA-Z0-9_-]{6,})/.exec(raw)
-  if (shorts?.[1]) return shorts[1]
-  const embed = /embed\/([a-zA-Z0-9_-]{6,})/.exec(raw)
-  if (embed?.[1]) return embed[1]
-  return null
-}
 
 const buildVideoUrl = (moveId?: string | null) => {
   if (!moveId) return null
-  const candidate = moveVideoMap[moveId]
-  const embed = toYouTubeEmbedWithParams(candidate)
-  if (embed) return embed
-  const id = extractYouTubeId(candidate)
-  return id ? buildEmbedUrl(id) : null
+  return moveVideoMap[moveId] ?? null
 }
 
 const INITIAL_NODES: Record<string, Node> = {
@@ -92,3 +75,7 @@ export function useFlow() {
 export default function FlowStoreRoutePlaceholder() {
   return null
 }
+
+
+
+

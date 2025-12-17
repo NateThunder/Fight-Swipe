@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Line } from "react-native-svg";
 import { useFlow } from "../FlowStore";
+import { HamburgerMenu } from "../components/HamburgerMenu";
 
 type Dir = "left" | "right" | "up" | "down"
 const DIRS: Dir[] = ["left", "right", "up", "down"]
@@ -248,12 +249,14 @@ export default function Overview() {
           right: 16,
           zIndex: 200,
           flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        {/* top-left back button */}
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      {/* top-left back button */}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <HamburgerMenu />
         <View
           style={{
             borderRadius: 16,
@@ -274,11 +277,12 @@ export default function Overview() {
             </Pressable>
           </BlurView>
         </View>
+      </View>
 
-        {/* top-right center button */}
-        <View style={{ alignSelf: "center", overflow: "hidden", borderRadius: 12 }}>
-          <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
-            <Pressable onPress={centerRoot} style={{ padding: 4, borderRadius: 999 }}>
+      {/* top-right center button */}
+      <View style={{ alignSelf: "center", overflow: "hidden", borderRadius: 12 }}>
+        <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
+          <Pressable onPress={centerRoot} style={{ padding: 4, borderRadius: 999 }}>
               <MaterialCommunityIcons name="image-filter-center-focus-weak" size={20} color="#f8fafc" />
             </Pressable>
           </BlurView>

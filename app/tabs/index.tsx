@@ -4,7 +4,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { BlurView } from "expo-blur"
 import { useRouter } from "expo-router"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Animated, Dimensions, Easing, Pressable, Text, View } from "react-native"
 import {
   GestureHandlerRootView,
@@ -16,6 +16,7 @@ import type { BJJNode } from "../BjjData"
 import { bjjData } from "../BjjData"
 import { useFlow, type Node } from "../FlowStore"
 import GameLobby from "../GameLobby"
+import { moveThumbs } from "../moveThumbs"
 import {
   createGameSave,
   loadAutoSave,
@@ -26,7 +27,7 @@ import {
   type GameSave,
 } from "../gameSaves"
 import MovesMenue from "../MovesMenue"
-import { moveVideoMap, toYouTubeEmbedWithParams } from "../TechniqueVideo"
+import { moveVideoMap } from "../TechniqueVideo"
 import { BranchPicker } from "./components/BranchPicker"
 import { FlowCard } from "./components/FlowCard"
 import {
@@ -37,37 +38,13 @@ import {
   neighborKey,
   opposite,
 } from "./utils/graph"
+import { HamburgerMenu } from "../components/HamburgerMenu"
 
 export type Axis = "x" | "y"
 
-const buildEmbedUrl = (id: string) => `https://www.youtube.com/embed/${id}?rel=0&playsinline=1`
-
-const extractYouTubeId = (raw?: string | null) => {
-  if (!raw) return null
-  // direct id
-  if (/^[a-zA-Z0-9_-]{6,}$/.test(raw) && !raw.includes("/")) return raw
-  // youtu.be/<id>
-  const short = /youtu\.be\/([a-zA-Z0-9_-]{6,})/.exec(raw)
-  if (short?.[1]) return short[1]
-  // watch?v=<id>
-  const watch = /[?&]v=([a-zA-Z0-9_-]{6,})/.exec(raw)
-  if (watch?.[1]) return watch[1]
-  // shorts/<id>
-  const shorts = /shorts\/([a-zA-Z0-9_-]{6,})/.exec(raw)
-  if (shorts?.[1]) return shorts[1]
-  // embed/<id>
-  const embed = /embed\/([a-zA-Z0-9_-]{6,})/.exec(raw)
-  if (embed?.[1]) return embed[1]
-  return null
-}
-
 const buildVideoUrl = (moveId?: string | null) => {
   if (!moveId) return null
-  const candidate = moveVideoMap[moveId]
-  const embed = toYouTubeEmbedWithParams(candidate)
-  if (embed) return embed
-  const id = extractYouTubeId(candidate)
-  return id ? buildEmbedUrl(id) : null
+  return moveVideoMap[moveId] ?? null
 }
 
 export default function Index() {
@@ -77,6 +54,7 @@ export default function Index() {
   const [saves, setSaves] = useState<GameSave[]>([])
   const [activeSaveId, setActiveSaveId] = useState<string | null>(null)
   const insets = useSafeAreaInsets()
+  const [ready, setReady] = useState(false)
   const lastSyncedRef = useRef<string | null>(null)
 
   // history for undo
@@ -104,6 +82,7 @@ export default function Index() {
     lastSyncedRef.current = null
     // reset history as well
     nodesHistoryRef.current = [{ nodes: { [rootId]: blank }, currentId: rootId }]
+    setReady(true)
   }, [rootId, setNodes, setCurrentId])
 
   const [menuVisible, setMenuVisible] = useState(false)
@@ -111,8 +90,9 @@ export default function Index() {
   const [menuParentId, setMenuParentId] = useState<string | null>(null)
   const [branchPickerFor, setBranchPickerFor] = useState<string | null>(null)
 
-  const translateX = useRef(new Animated.Value(0)).current
-  const translateY = useRef(new Animated.Value(0)).current
+  const initialOffsets = useMemo(() => ({ x: 0, y: 0 }), [])
+  const translateX = useRef(new Animated.Value(initialOffsets.x)).current
+  const translateY = useRef(new Animated.Value(initialOffsets.y)).current
 
   const [axis, setAxis] = useState<Axis>("x")
   const lockedAxis = useRef<Axis | null>(null)
@@ -123,7 +103,7 @@ export default function Index() {
   const verticalGap = 32
 
   const cardWidth = screenWidth - 80
-  const cardHeight = Math.max(screenHeight * 0.55, 320)
+  const cardHeight = Math.max(cardWidth * (16 / 9), 320)
 
   const distanceX = cardWidth + horizontalGap
   const distanceY = cardHeight + verticalGap
@@ -529,31 +509,32 @@ export default function Index() {
       const forwardKey = neighborKey(dir)
       const backKey = neighborKey(opposite(dir))
       const branchKey = branchListKey(dir)
-      const embedUrl = buildVideoUrl(move.id)
+          const embedUrl = buildVideoUrl(move.id)
 
-      setNodes((prev) => {
-        const parent = prev[parentId]
-        if (!parent) return prev
-        if (parent.type === "Submission" || parent.stage === 4) return prev
+          setNodes((prev) => {
+            const parent = prev[parentId]
+            if (!parent) return prev
+            if (parent.type === "Submission" || parent.stage === 4) return prev
 
         const branchList = parent[branchKey] ? [...parent[branchKey]!] : []
         const existingForward = parent[forwardKey] as string | undefined
         if (existingForward && !branchList.includes(existingForward)) branchList.unshift(existingForward)
         branchList.push(newId)
 
-        return {
-          ...prev,
-          [parentId]: { ...parent, [forwardKey]: branchList[0], [branchKey]: branchList },
-          [newId]: {
-            id: newId,
-            title: move.name,
-            moveId: move.id,
-            videoUrl: embedUrl ?? undefined,
-            group: move.group,
-            type: move.type,
-            stage: move.stage,
-            notes: move.notes_md,
-            [backKey]: parentId,
+          return {
+            ...prev,
+            [parentId]: { ...parent, [forwardKey]: branchList[0], [branchKey]: branchList },
+            [newId]: {
+              id: newId,
+              title: move.name,
+              moveId: move.id,
+              videoUrl: embedUrl ?? undefined,
+              thumbnail: moveThumbs[move.id],
+              group: move.group,
+              type: move.type,
+              stage: move.stage,
+              notes: move.notes_md,
+              [backKey]: parentId,
           },
         }
       })
@@ -578,6 +559,7 @@ export default function Index() {
                     moveId: move.id,
                     title: move.name,
                     videoUrl: buildVideoUrl(move.id) ?? undefined,
+                    thumbnail: moveThumbs[move.id],
                     group: move.group,
                     type: move.type,
                     stage: move.stage,
@@ -640,8 +622,11 @@ export default function Index() {
       setShowLobby(false)
       // initialise history with loaded snapshot
       nodesHistoryRef.current = [{ nodes: snapshot.nodes, currentId: snapshot.currentId || rootId }]
+      setReady(true)
     }
-    load()
+    load().then(() => {
+      if (!cancelled) setReady(true)
+    })
     return () => {
       cancelled = true
     }
@@ -728,6 +713,13 @@ export default function Index() {
     })
   }, [activeSaveId, nodes, currentId])
 
+  // Ensure ready flips synchronously before paint when state is present to reduce flicker.
+  useLayoutEffect(() => {
+    if (!ready && nodes[currentId]) {
+      setReady(true)
+    }
+  }, [ready, nodes, currentId])
+
   if (showLobby) {
     return (
       <GameLobby
@@ -745,35 +737,38 @@ export default function Index() {
     !branchPickerFor &&
     ((currentId !== rootId) || (currentId === rootId && rootHasFlow))
 
-  return (
+  return !ready ? null : (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={{ flex: 1, backgroundColor: "#0b0d12" }}>
         <View
           pointerEvents="box-none"
-          style={{
-            position: "absolute",
-            top: insets.top + 20,
-            left: 16,
-            right: 16,
-            zIndex: 300,
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <View
-            style={{
-              borderRadius: 14,
-              overflow: "hidden",
-              borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.14)",
-            }}
-          >
-            <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
-              <Pressable onPress={() => setShowLobby(true)} style={{ borderRadius: 999 }}>
-                <Text style={{ color: "#f5f5f5", fontWeight: "600" }}>{"\u2190"} Back to Lobby</Text>
-              </Pressable>
-            </BlurView>
+        style={{
+          position: "absolute",
+          top: insets.top + 20,
+          left: 16,
+          right: 16,
+          zIndex: 300,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <HamburgerMenu />
+            <View
+              style={{
+                borderRadius: 14,
+                overflow: "hidden",
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.14)",
+              }}
+            >
+              <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 10, paddingVertical: 6 }}>
+                <Pressable onPress={() => setShowLobby(true)} style={{ borderRadius: 999 }}>
+                  <Text style={{ color: "#f5f5f5", fontWeight: "600" }}>{"\u2190"} Back to Lobby</Text>
+                </Pressable>
+              </BlurView>
+            </View>
           </View>
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
