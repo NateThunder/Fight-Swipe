@@ -1,10 +1,8 @@
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
-import MaterialIcons from "@expo/vector-icons/MaterialIcons"
-import React from "react"
-import { ActivityIndicator, Image, Pressable, Text, View } from "react-native"
-import { WebView } from "react-native-webview"
+﻿import MaterialIcons from "@expo/vector-icons/MaterialIcons"
+import { Video, ResizeMode, type AVPlaybackSource } from "expo-av"
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { Animated, Pressable, Text, View, StyleSheet } from "react-native"
 import type { Node } from "../../FlowStore"
-import { disableScrollJS, extractYouTubeId } from "../utils/media"
 
 type Axis = "x" | "y"
 
@@ -17,106 +15,35 @@ type Props = {
   setPlayingIds: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
 }
 
-export function FlowCard({ node, cardWidth, cardHeight, axis, playingIds, setPlayingIds }: Props) {
+export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingIds }: Props) {
   const isEmpty = !node.videoUrl
-  const videoId = extractYouTubeId(node.videoUrl)
-  const thumbnail = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : null
   const isPlaying = Boolean(playingIds[node.id])
 
-  const renderMedia = () => {
-    if (isEmpty) {
-      return (
-        <View
-          style={{
-            flex: 1,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: "#111827",
-          }}
-        />
-      )
-    }
+  const [videoReady, setVideoReady] = useState(false)
+  const videoOpacity = useRef(new Animated.Value(0)).current
 
-    if (!isPlaying) {
-      return (
-        <Pressable
-          onPress={() => setPlayingIds((prev) => ({ ...prev, [node.id]: true }))}
-          style={{
-            flex: 1,
-            backgroundColor: "#0f172a",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {thumbnail ? (
-            <Image source={{ uri: thumbnail }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
-          ) : null}
-          <View
-            style={{
-              position: "absolute",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 12,
-              backgroundColor: "rgba(0,0,0,0.55)",
-              borderRadius: 999,
-            }}
-          >
-            <MaterialIcons name="play-circle-fill" size={56} color="#f97316" />
-          </View>
-        </Pressable>
-      )
-    }
+  // When the video source or node changes, reset play state + fade
+  useLayoutEffect(() => {
+    setPlayingIds((prev) => {
+      if (!prev[node.id]) return prev
+      const next = { ...prev }
+      delete next[node.id]
+      return next
+    })
 
-    return (
-      <WebView
-        source={{ uri: node.videoUrl }}
-        allowsFullscreenVideo
-        allowsInlineMediaPlayback
-        mediaPlaybackRequiresUserAction={false}
-        javaScriptEnabled
-        domStorageEnabled
-        useWebKit
-        originWhitelist={["*"]}
-        contentMode="mobile"
-        mixedContentMode="always"
-        startInLoadingState
-        injectedJavaScript={disableScrollJS}
-        scrollEnabled={false}
-        bounces={false}
-        showsVerticalScrollIndicator={false}
-        showsHorizontalScrollIndicator={false}
-        renderToHardwareTextureAndroid
-        renderError={() => (
-          <View
-            style={{
-              flex: 1,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "#111827",
-              padding: 16,
-            }}
-          >
-            <Text style={{ color: "#e2e8f0", fontSize: 14, textAlign: "center" }}>
-              Video player configuration error. Try another technique or check your connection.
-            </Text>
-          </View>
-        )}
-        renderLoading={() => (
-          <View
-            style={{
-              flex: 1,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: "#111827",
-            }}
-          >
-            <ActivityIndicator size="large" color="#f97316" />
-          </View>
-        )}
-        style={{ flex: 1 }}
-      />
-    )
-  }
+    setVideoReady(false)
+    videoOpacity.setValue(0)
+  }, [node.id, node.videoUrl, setPlayingIds, videoOpacity])
+
+  // Fade in once the native video reports it's ready
+  useEffect(() => {
+    if (!videoReady) return
+    Animated.timing(videoOpacity, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: true,
+    }).start()
+  }, [videoReady, videoOpacity])
 
   return (
     <View
@@ -125,47 +52,101 @@ export function FlowCard({ node, cardWidth, cardHeight, axis, playingIds, setPla
         height: cardHeight,
         borderRadius: 16,
         overflow: "hidden",
-        backgroundColor: "#111827",
+        backgroundColor: "#000",
         borderWidth: 1,
         borderColor: "#f97316",
       }}
     >
-      {renderMedia()}
+      <View style={{ flex: 1, backgroundColor: "#000" }}>
+        {isEmpty ? (
+          <View
+            style={{
+              flex: 1,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "#111827",
+            }}
+          />
+        ) : (
+          <>
+            {/* Solid background so there's never a flash of random content */}
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: "#000" }]} />
 
+            <Animated.View style={{ flex: 1, opacity: videoOpacity }}>
+              <Video
+                source={node.videoUrl as AVPlaybackSource}
+                style={{ width: "100%", height: "100%" }}
+                resizeMode={ResizeMode.CONTAIN}
+                useNativeControls={isPlaying}
+                shouldPlay={isPlaying}
+                isMuted={!isPlaying}
+                usePoster={!!node.thumbnail}
+                posterSource={node.thumbnail as any}
+                posterStyle={{ width: "100%", height: "100%", resizeMode: "cover" }}
+                onReadyForDisplay={() => {
+                  setVideoReady(true)
+                }}
+                onPlaybackStatusUpdate={(status) => {
+                  if (!status.isLoaded) return
+                  if (status.didJustFinish) {
+                    setPlayingIds((prev) => {
+                      const next = { ...prev }
+                      delete next[node.id]
+                      return next
+                    })
+                  }
+                }}
+              />
+            </Animated.View>
+
+            {/* Play overlay when not playing */}
+            {!isPlaying && (
+              <Pressable
+                onPress={() =>
+                  setPlayingIds((prev) => ({
+                    ...prev,
+                    [node.id]: true,
+                  }))
+                }
+                style={{
+                  position: "absolute",
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: "rgba(0,0,0,0.25)",
+                }}
+              >
+                <MaterialIcons name="play-circle-fill" size={56} color="#f97316" />
+              </Pressable>
+            )}
+          </>
+        )}
+      </View>
+
+      {/* Text overlay stays the same */}
       <View
         style={{
-          padding: 16,
-          borderTopWidth: 1,
-          borderTopColor: "rgba(249,115,22,0.35)",
-          backgroundColor: "#0f172a",
-          gap: 8,
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          padding: 12,
+          backgroundColor: "transparent",
         }}
       >
-        <Text
-          style={{
-            color: "#f8fafc",
-            fontSize: 20,
-            fontWeight: "700",
-          }}
-          numberOfLines={2}
-        >
+        <Text style={{ color: "#f8fafc", fontSize: 18, fontWeight: "700" }} numberOfLines={2}>
           {node.title}
-        </Text>
-        <Text style={{ color: "#94a3b8", fontSize: 16 }}>
-          Axis: {axis.toUpperCase()} (swipe only where nodes exist)
         </Text>
         {!!node.group && (
           <Text style={{ color: "#cbd5e1", fontSize: 14 }}>
             {node.group} {node.stage ? `- Stage ${node.stage}` : ""}
           </Text>
         )}
-        {!!node.type && (
-          <Text style={{ color: "#cbd5e1", fontSize: 14 }}>
-            Type: {node.type}
-          </Text>
-        )}
         {!!node.notes && (
-          <Text style={{ color: "#94a3b8", fontSize: 13 }} numberOfLines={3}>
+          <Text style={{ color: "#cbd5e1", fontSize: 13 }} numberOfLines={3}>
             {node.notes}
           </Text>
         )}

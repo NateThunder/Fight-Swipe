@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import type { BJJNode, StageId } from "./BjjData"
 import type { GameSave } from "./gameSaves"
+import { HamburgerMenu } from "./components/HamburgerMenu"
 
 interface GameLobbyProps {
   // Rename these upstream if you want, but it’s not required.
@@ -174,12 +175,23 @@ const GameLobby: FC<GameLobbyProps> = ({
             alignItems: "center",
             paddingBottom: 12,
           }}
+      >
+        <View
+          style={{
+            position: "absolute",
+            top: insets.top + 20,
+            left: 16,
+            zIndex: 80,
+          }}
         >
-          {/* Label */}
-          <View style={{ overflow: "hidden", borderRadius: 12, borderColor: "rgba(255,255,255,0.14)" }}>
-            <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
-              <Text
-                variant="labelSmall"
+          <HamburgerMenu />
+        </View>
+
+        {/* Label */}
+        <View style={{ overflow: "hidden", borderRadius: 12, borderColor: "rgba(255,255,255,0.14)" }}>
+          <BlurView intensity={35} tint="dark" style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 }}>
+            <Text
+              variant="labelSmall"
                 style={{
                   color: "#94a3b8",
                   letterSpacing: 1,
