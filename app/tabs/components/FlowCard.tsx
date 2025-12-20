@@ -127,30 +127,32 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
       </View>
 
       {/* Text overlay stays the same */}
-      <View
-        style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          bottom: 0,
-          padding: 12,
-          backgroundColor: "transparent",
-        }}
-      >
-        <Text style={{ color: "#f8fafc", fontSize: 18, fontWeight: "700" }} numberOfLines={2}>
-          {node.title}
-        </Text>
-        {!!node.group && (
-          <Text style={{ color: "#cbd5e1", fontSize: 14 }}>
-            {node.group} {node.stage ? `- Stage ${node.stage}` : ""}
+      {!!node.moveId && (
+        <View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            padding: 12,
+            backgroundColor: "transparent",
+          }}
+        >
+          <Text style={{ color: "#f8fafc", fontSize: 18, fontWeight: "700" }} numberOfLines={2}>
+            {node.title}
           </Text>
-        )}
-        {!!node.notes && (
-          <Text style={{ color: "#cbd5e1", fontSize: 13 }} numberOfLines={3}>
-            {node.notes}
-          </Text>
-        )}
-      </View>
+          {!!node.group && (
+            <Text style={{ color: "#cbd5e1", fontSize: 14 }}>
+              {node.group} {node.stage ? `- Stage ${node.stage}` : ""}
+            </Text>
+          )}
+          {!!node.notes && (
+            <Text style={{ color: "#cbd5e1", fontSize: 13 }} numberOfLines={3}>
+              {node.notes}
+            </Text>
+          )}
+        </View>
+      )}
     </View>
   )
 }
