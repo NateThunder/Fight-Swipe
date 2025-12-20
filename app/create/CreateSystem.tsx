@@ -1065,14 +1065,16 @@ export default function Index() {
               }}
               onSave={handleDescriptionSave}
               initialTitle={
-                menuParentId
-                  ? (() => {
-                      const t = nodes[menuParentId]?.title ?? ""
-                      return t === "Start Here" ? "" : t
-                    })()
-                  : ""
+                menuDirection
+                  ? ""
+                  : menuParentId
+                    ? (() => {
+                        const t = nodes[menuParentId]?.title ?? ""
+                        return t === "Start Here" ? "" : t
+                      })()
+                    : ""
               }
-              initialDescription={menuParentId ? nodes[menuParentId]?.notes ?? "" : ""}
+              initialDescription={menuDirection ? "" : menuParentId ? nodes[menuParentId]?.notes ?? "" : ""}
             />
           </View>
         </PanGestureHandler>
