@@ -33,6 +33,8 @@ export default function CreateDescription({
     const name = title.trim()
     if (!name) return
     onSave({ title: name, description: description.trim() })
+    setTitle("")
+    setDescription("")
     onClose()
   }
 
