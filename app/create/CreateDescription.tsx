@@ -1,11 +1,12 @@
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
+import * as ImagePicker from "expo-image-picker"
 import React, { useEffect, useState } from "react"
-import { Modal, Pressable, Text, TextInput, View } from "react-native"
+import { Alert, Modal, Pressable, Text, TextInput, View } from "react-native"
 
 type CreateDescriptionProps = {
   visible: boolean
   onClose: () => void
-  onSave: (payload: { title: string; description: string }) => void
+  onSave: (payload: { title: string; description: string; mediaUri?: string; mediaType?: "image" | "video" }) => void
   initialTitle?: string
   initialDescription?: string
 }
@@ -23,19 +24,78 @@ export default function CreateDescription({
 }: CreateDescriptionProps) {
   const [title, setTitle] = useState(initialTitle)
   const [description, setDescription] = useState(initialDescription)
+  const [mediaUri, setMediaUri] = useState<string | undefined>(undefined)
+  const [mediaType, setMediaType] = useState<"image" | "video" | undefined>(undefined)
 
   useEffect(() => {
     setTitle(initialTitle)
     setDescription(initialDescription)
+    setMediaUri(undefined)
+    setMediaType(undefined)
   }, [initialTitle, initialDescription, visible])
 
   const handleSave = () => {
     const name = title.trim()
     if (!name) return
-    onSave({ title: name, description: description.trim() })
+    onSave({ title: name, description: description.trim(), mediaUri, mediaType })
     setTitle("")
     setDescription("")
+    setMediaUri(undefined)
+    setMediaType(undefined)
     onClose()
+  }
+
+  const handleLaunchCamera = async () => {
+    try {
+      const perm = await ImagePicker.requestCameraPermissionsAsync()
+      if (!perm.granted) {
+        Alert.alert("Permission required", "Camera permission is needed to capture media.")
+        return
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        quality: 0.8,
+        videoMaxDuration: 60,
+      })
+      if (result.canceled) return
+      const asset = result.assets?.[0]
+      if (!asset?.uri) return
+      const type = asset.type === "video" ? "video" : "image"
+      setMediaUri(asset.uri)
+      setMediaType(type)
+    } catch (err) {
+      Alert.alert(
+        "Camera unavailable",
+        "expo-image-picker could not be loaded. Make sure it is installed in this project."
+      )
+    }
+  }
+
+  const handleLaunchLibrary = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      if (!perm.granted) {
+        Alert.alert("Permission required", "Photos permission is needed to pick media.")
+        return
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        quality: 0.8,
+        allowsMultipleSelection: false,
+      })
+      if (result.canceled) return
+      const asset = result.assets?.[0]
+      if (!asset?.uri) return
+      const type = asset.type === "video" ? "video" : "image"
+      setMediaUri(asset.uri)
+      setMediaType(type)
+    } catch (err) {
+      Alert.alert(
+        "Library unavailable",
+        "expo-image-picker could not be loaded. Make sure it is installed in this project."
+      )
+    }
   }
 
   return (
@@ -67,8 +127,13 @@ export default function CreateDescription({
             position: "relative",
           }}
         >
-          <View style={{ position: "absolute", left: 67, bottom: 20 }}>
-            <MaterialCommunityIcons name="camera-outline" size={33} color="#f97316" />
+          <View style={{ position: "absolute", left: 12, bottom: 12, flexDirection: "row", gap: 8 }}>
+            <Pressable onPress={handleLaunchCamera} style={{ padding: 8, borderRadius: 999 }}>
+              <MaterialCommunityIcons name="camera-outline" size={26} color="#f97316" />
+            </Pressable>
+            <Pressable onPress={handleLaunchLibrary} style={{ padding: 8, borderRadius: 999 }}>
+              <MaterialCommunityIcons name="image-multiple-outline" size={26} color="#f97316" />
+            </Pressable>
           </View>
 
           <View style={{ gap: 4, alignItems: "center" }}>
@@ -77,6 +142,26 @@ export default function CreateDescription({
               Name your move and add a description.
             </Text>
           </View>
+
+          {!!mediaUri && (
+            <View
+              style={{
+                width: "100%",
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: "rgba(255,255,255,0.12)",
+                padding: 10,
+                backgroundColor: "rgba(255,255,255,0.03)",
+              }}
+            >
+              <Text style={{ color: "#cbd5e1", fontSize: 13 }}>
+                Attached {mediaType === "video" ? "video" : "image"}
+              </Text>
+              <Text style={{ color: "#94a3b8", fontSize: 12 }} numberOfLines={1}>
+                {mediaUri}
+              </Text>
+            </View>
+          )}
 
           <View style={{ gap: 6, width: "100%", alignItems: "center" }}>
             <Text style={{ color: "#cbd5e1", fontSize: 13, textAlign: "center" }}>Move name</Text>

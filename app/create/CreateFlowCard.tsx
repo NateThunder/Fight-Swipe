@@ -1,7 +1,7 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { Video, ResizeMode, type AVPlaybackSource } from "expo-av"
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { Animated, Pressable, Text, View, StyleSheet } from "react-native"
+import { Animated, Pressable, Text, View, StyleSheet, Image } from "react-native"
 import type { Node } from "../../FlowStore"
 
 type Axis = "x" | "y"
@@ -16,7 +16,9 @@ type Props = {
 }
 
 export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingIds }: Props) {
-  const isEmpty = !node.videoUrl
+  const hasVideo = !!node.videoUrl
+  const hasImage = !!node.thumbnail && !node.videoUrl
+  const isEmpty = !hasVideo && !hasImage
   const isPlaying = Boolean(playingIds[node.id])
 
   const [videoReady, setVideoReady] = useState(false)
@@ -67,9 +69,8 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
               backgroundColor: "#111827",
             }}
           />
-        ) : (
+        ) : hasVideo ? (
           <>
-            {/* Solid background so there's never a flash of random content */}
             <View style={[StyleSheet.absoluteFill, { backgroundColor: "#000" }]} />
 
             <Animated.View style={{ flex: 1, opacity: videoOpacity }}>
@@ -99,7 +100,6 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
               />
             </Animated.View>
 
-            {/* Play overlay when not playing */}
             {!isPlaying && (
               <Pressable
                 onPress={() =>
@@ -123,6 +123,11 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
               </Pressable>
             )}
           </>
+        ) : (
+          <Image
+            source={node.thumbnail as any}
+            style={{ width: "100%", height: "100%", resizeMode: "cover" }}
+          />
         )}
       </View>
 
