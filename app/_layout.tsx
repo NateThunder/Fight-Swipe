@@ -79,6 +79,7 @@ function TabsLayout() {
       <Tabs.Screen name="asyncStorage" options={{ href: null }} />
       <Tabs.Screen name="FlowStore" options={{ href: null }} />
       <Tabs.Screen name="gameSaves" options={{ href: null }} />
+      <Tabs.Screen name="create/CreateSystemLobby" options={{ href: null }} />
       <Tabs.Screen name="explore" options={{ href: null }} />
       <Tabs.Screen name="settings" options={{ href: null }} />
       <Tabs.Screen name="components/HamburgerMenu" options={{ href: null }} />

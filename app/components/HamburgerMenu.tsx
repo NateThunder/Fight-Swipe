@@ -36,6 +36,7 @@ export function HamburgerMenu({ iconColor = "#f8fafc" }: HamburgerMenuProps) {
     if (item.key === "overview") return pathname.startsWith("/tabs/overview")
     if (item.key === "explore") return pathname.startsWith("/explore")
     if (item.key === "settings") return pathname.startsWith("/settings")
+    if (item.key === "create") return pathname.startsWith("/create/CreateSystemLobby")
     if (item.key === "lobby") return showLobby && pathname.startsWith("/tabs")
     if (item.key === "flow") {
       const onTabs = pathname.startsWith("/tabs")
@@ -112,6 +113,16 @@ export function HamburgerMenu({ iconColor = "#f8fafc" }: HamburgerMenuProps) {
         action: () => {
           setShowLobby(false)
           router.push("/settings")
+        },
+      },
+      {
+        key: "create",
+        label: "Create",
+        icon: "create-sharp",
+        family: "ion",
+        action: () => {
+          setShowLobby(false)
+          router.push("/create/CreateSystemLobby")
         },
       },
       {
