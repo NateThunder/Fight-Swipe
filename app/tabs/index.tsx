@@ -3,7 +3,7 @@ import FontAwesome6 from "@expo/vector-icons/FontAwesome6"
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons"
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { BlurView } from "expo-blur"
-import { useRouter } from "expo-router"
+import { useLocalSearchParams, useRouter } from "expo-router"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Animated, Dimensions, Easing, Pressable, Text, View } from "react-native"
 import {
@@ -14,9 +14,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import type { BJJNode } from "../BjjData"
 import { bjjData } from "../BjjData"
+import { HamburgerMenu } from "../components/HamburgerMenu"
 import { useFlow, type Node } from "../FlowStore"
 import GameLobby from "../GameLobby"
-import { moveThumbs } from "../moveThumbs"
 import {
   createGameSave,
   loadAutoSave,
@@ -27,6 +27,7 @@ import {
   type GameSave,
 } from "../gameSaves"
 import MovesMenue from "../MovesMenue"
+import { moveThumbs } from "../moveThumbs"
 import { moveVideoMap } from "../TechniqueVideo"
 import { BranchPicker } from "./components/BranchPicker"
 import { FlowCard } from "./components/FlowCard"
@@ -38,7 +39,6 @@ import {
   neighborKey,
   opposite,
 } from "./utils/graph"
-import { HamburgerMenu } from "../components/HamburgerMenu"
 
 export type Axis = "x" | "y"
 
@@ -50,6 +50,7 @@ const buildVideoUrl = (moveId?: string | null) => {
 export default function Index() {
   const { nodes, setNodes, currentId, setCurrentId, showLobby, setShowLobby, rootId } = useFlow()
   const router = useRouter()
+  const params = useLocalSearchParams()
   const [playingIds, setPlayingIds] = useState<Record<string, boolean>>({})
   const [saves, setSaves] = useState<GameSave[]>([])
   const [activeSaveId, setActiveSaveId] = useState<string | null>(null)
@@ -60,6 +61,7 @@ export default function Index() {
   // history for undo
   const nodesHistoryRef = useRef<Array<{ nodes: Record<string, Node>; currentId: string }>>([])
   const isUndoRef = useRef(false)
+  const initialActiveSaveFromParams = useRef(false)
 
   const resetToBlankFlow = useCallback(() => {
     const blank: Node = {
@@ -93,6 +95,7 @@ export default function Index() {
   const initialOffsets = useMemo(() => ({ x: 0, y: 0 }), [])
   const translateX = useRef(new Animated.Value(initialOffsets.x)).current
   const translateY = useRef(new Animated.Value(initialOffsets.y)).current
+  const baseYOffset = useRef(new Animated.Value(20)).current
 
   const [axis, setAxis] = useState<Axis>("x")
   const lockedAxis = useRef<Axis | null>(null)
@@ -466,7 +469,7 @@ export default function Index() {
     setCurrentId(prev.currentId)
   }, [setNodes, setCurrentId])
 
-  const stageTransform = [{ translateX }, { translateY }]
+  const stageTransform = [{ translateX }, { translateY: Animated.add(translateY, baseYOffset) }]
 
   const outerWidth = cardWidth + horizontalGap * 2
   const outerHeight = cardHeight + verticalGap * 2
@@ -591,6 +594,17 @@ export default function Index() {
     const loaded = await loadGameSaves()
     setSaves(loaded)
   }, [])
+
+  useEffect(() => {
+    if (initialActiveSaveFromParams.current) return
+    const raw = params?.activeSaveId
+    const incomingId = Array.isArray(raw) ? raw[0] : raw
+    if (incomingId && typeof incomingId === "string") {
+      setActiveSaveId(incomingId)
+      setShowLobby(false)
+      initialActiveSaveFromParams.current = true
+    }
+  }, [params, setShowLobby])
 
   useEffect(() => {
     loadSavesFromStorage()
