@@ -44,6 +44,8 @@ export type Axis = "x" | "y"
 type UserMoveInput = {
   title: string
   description: string
+  mediaUri?: string
+  mediaType?: "image" | "video"
 }
 
 export default function Index() {
@@ -512,6 +514,8 @@ export default function Index() {
                     title: cleanTitle,
                     notes: cleanNotes || undefined,
                     moveId: node.moveId,
+                    videoUrl: input.mediaType === "video" ? input.mediaUri ?? node.videoUrl : node.videoUrl,
+                    thumbnail: input.mediaType === "image" ? (input.mediaUri ? { uri: input.mediaUri } : node.thumbnail) : node.thumbnail,
                   },
                 ]
               : [id, node],
@@ -563,8 +567,8 @@ export default function Index() {
             id: newId,
             title: cleanTitle,
             moveId: undefined,
-            videoUrl: undefined,
-            thumbnail: undefined,
+            videoUrl: input.mediaType === "video" ? input.mediaUri : undefined,
+            thumbnail: input.mediaType === "image" && input.mediaUri ? { uri: input.mediaUri } : undefined,
             group: undefined,
             type: undefined,
             stage: undefined,
@@ -781,6 +785,21 @@ export default function Index() {
               <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
                 <Pressable onPress={handleGoToRoot} style={{ padding: 4, borderRadius: 999 }}>
                   <MaterialCommunityIcons name="image-filter-center-focus-weak" size={20} color="#f8fafc" />
+                </Pressable>
+              </BlurView>
+            </View>
+
+            <View style={{ overflow: "hidden", borderRadius: 12 }}>
+              <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
+                <Pressable
+                  onPress={() => {
+                    setMenuDirection(null)
+                    setMenuParentId(currentId)
+                    setMenuVisible(true)
+                  }}
+                  style={{ padding: 4, borderRadius: 999 }}
+                >
+                  <MaterialCommunityIcons name="pencil-outline" size={20} color="#f8fafc" />
                 </Pressable>
               </BlurView>
             </View>
