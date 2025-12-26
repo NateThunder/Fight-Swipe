@@ -1,6 +1,6 @@
 import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { Video, ResizeMode, type AVPlaybackSource } from "expo-av"
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react"
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Animated, Pressable, Text, View, StyleSheet, Image } from "react-native"
 import type { Node } from "../../FlowStore"
 
@@ -13,9 +13,19 @@ type Props = {
   axis: Axis
   playingIds: Record<string, boolean>
   setPlayingIds: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  isCurrent: boolean
+  isRoot: boolean
 }
 
-export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingIds }: Props) {
+// Normalize video URL to a string for comparison (handles both string and {uri: string} formats)
+const getVideoUrlString = (videoUrl?: AVPlaybackSource | string): string | null => {
+  if (!videoUrl) return null
+  if (typeof videoUrl === "string") return videoUrl
+  if (typeof videoUrl === "object" && videoUrl && "uri" in videoUrl) return videoUrl.uri
+  return null
+}
+
+export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingIds, isCurrent, isRoot }: Props) {
   const hasVideo = !!node.videoUrl
   const hasImage = !!node.thumbnail && !node.videoUrl
   const isEmpty = !hasVideo && !hasImage
@@ -23,19 +33,53 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
 
   const [videoReady, setVideoReady] = useState(false)
   const videoOpacity = useRef(new Animated.Value(0)).current
+  
+  // Normalize video URL to string for stable comparison
+  const videoUrlString = useMemo(() => getVideoUrlString(node.videoUrl), [node.videoUrl])
+  
+  // Stabilize video source object to prevent unnecessary re-renders
+  const videoSource = useMemo(() => {
+    if (!node.videoUrl) return undefined
+    // If it's already an object, use it; otherwise wrap string in object
+    if (typeof node.videoUrl === "object" && node.videoUrl && "uri" in node.videoUrl) {
+      return node.videoUrl as AVPlaybackSource
+    }
+    if (typeof node.videoUrl === "string") {
+      return { uri: node.videoUrl } as AVPlaybackSource
+    }
+    return node.videoUrl as AVPlaybackSource
+  }, [videoUrlString])
 
-  // When the video source or node changes, reset play state + fade
+  // Track previous values to only reset when they actually change
+  const prevNodeIdRef = useRef<string | null>(null)
+  const prevVideoUrlStringRef = useRef<string | null>(null)
+  const shouldAutoPlayAfterResetRef = useRef(false)
+  
   useLayoutEffect(() => {
-    setPlayingIds((prev) => {
-      if (!prev[node.id]) return prev
-      const next = { ...prev }
-      delete next[node.id]
-      return next
-    })
+    const isFirstRender = prevNodeIdRef.current === null
+    const nodeIdChanged = prevNodeIdRef.current !== node.id
+    const videoUrlChanged = prevVideoUrlStringRef.current !== videoUrlString
+    
+    // Only reset if node ID or video URL actually changed (not on first render, not on same values)
+    if (!isFirstRender && (nodeIdChanged || videoUrlChanged)) {
+      // Remember if we should auto-play after reset (current card)
+      shouldAutoPlayAfterResetRef.current = isCurrent && hasVideo
+      
+      setPlayingIds((prev) => {
+        if (!prev[node.id]) return prev
+        const next = { ...prev }
+        delete next[node.id]
+        return next
+      })
 
-    setVideoReady(false)
-    videoOpacity.setValue(0)
-  }, [node.id, node.videoUrl, setPlayingIds, videoOpacity])
+      setVideoReady(false)
+      videoOpacity.setValue(0)
+    }
+    
+    // Update refs after checking
+    prevNodeIdRef.current = node.id
+    prevVideoUrlStringRef.current = videoUrlString
+  }, [node.id, videoUrlString, isCurrent, isRoot, hasVideo, setPlayingIds, videoOpacity])
 
   // Fade in once the native video reports it's ready
   useEffect(() => {
@@ -45,7 +89,37 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
       duration: 200,
       useNativeDriver: true,
     }).start()
-  }, [videoReady, videoOpacity])
+    
+    // Auto-play after video is ready if we flagged it for auto-play
+    if (shouldAutoPlayAfterResetRef.current) {
+      shouldAutoPlayAfterResetRef.current = false
+      setPlayingIds((prev) => ({
+        ...prev,
+        [node.id]: true,
+      }))
+    }
+  }, [videoReady, videoOpacity, node.id, setPlayingIds])
+
+  // Auto-play videos when they become current (TikTok-like behavior)
+  useEffect(() => {
+    if (!hasVideo) return
+    
+    if (isCurrent) {
+      // Auto-play when card becomes current
+      setPlayingIds((prev) => ({
+        ...prev,
+        [node.id]: true,
+      }))
+    } else if (!isCurrent) {
+      // Pause when card is no longer current
+      setPlayingIds((prev) => {
+        if (!prev[node.id]) return prev
+        const next = { ...prev }
+        delete next[node.id]
+        return next
+      })
+    }
+  }, [isCurrent, hasVideo, node.id, setPlayingIds])
 
   return (
     <View
@@ -74,30 +148,33 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
             <View style={[StyleSheet.absoluteFill, { backgroundColor: "#000" }]} />
 
             <Animated.View style={{ flex: 1, opacity: videoOpacity }}>
-              <Video
-                source={node.videoUrl as AVPlaybackSource}
-                style={{ width: "100%", height: "100%" }}
-                resizeMode={ResizeMode.CONTAIN}
-                useNativeControls={isPlaying}
-                shouldPlay={isPlaying}
-                isMuted={!isPlaying}
-                usePoster={!!node.thumbnail}
-                posterSource={node.thumbnail as any}
-                posterStyle={{ width: "100%", height: "100%", resizeMode: "cover" }}
-                onReadyForDisplay={() => {
-                  setVideoReady(true)
-                }}
-                onPlaybackStatusUpdate={(status) => {
-                  if (!status.isLoaded) return
-                  if (status.didJustFinish) {
-                    setPlayingIds((prev) => {
-                      const next = { ...prev }
-                      delete next[node.id]
-                      return next
-                    })
-                  }
-                }}
-              />
+              {videoSource && (
+                <Video
+                  key={videoUrlString || node.id}
+                  source={videoSource}
+                  style={{ width: "100%", height: "100%" }}
+                  resizeMode={ResizeMode.CONTAIN}
+                  useNativeControls={isPlaying}
+                  shouldPlay={isPlaying}
+                  isMuted={false}
+                  usePoster={!!node.thumbnail}
+                  posterSource={node.thumbnail as any}
+                  posterStyle={{ width: "100%", height: "100%", resizeMode: "cover" }}
+                  onReadyForDisplay={() => {
+                    setVideoReady(true)
+                  }}
+                  onPlaybackStatusUpdate={(status) => {
+                    if (!status.isLoaded) return
+                    if (status.didJustFinish) {
+                      setPlayingIds((prev) => {
+                        const next = { ...prev }
+                        delete next[node.id]
+                        return next
+                      })
+                    }
+                  }}
+                />
+              )}
             </Animated.View>
 
             {!isPlaying && (

@@ -82,6 +82,8 @@ export function BranchPicker({
               axis={axis}
               playingIds={playingIds}
               setPlayingIds={setPlayingIds}
+              isCurrent={false}
+              isRoot={false}
             />
           </Pressable>
         )

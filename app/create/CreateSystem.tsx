@@ -8,9 +8,9 @@ import { useLocalSearchParams } from "expo-router"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Animated, Dimensions, Easing, Pressable, Text, View } from "react-native"
 import {
-    GestureHandlerRootView,
-    PanGestureHandler,
-    type PanGestureHandlerGestureEvent,
+  GestureHandlerRootView,
+  PanGestureHandler,
+  type PanGestureHandlerGestureEvent,
 } from "react-native-gesture-handler"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import type { BJJNode } from "../BjjData"
@@ -19,24 +19,24 @@ import { HamburgerMenu } from "../components/HamburgerMenu"
 import { useFlow, type Node } from "../FlowStore"
 import GameLobby from "../GameLobby"
 import {
-    BranchKey,
-    branchListKey,
-    Direction,
-    getBranchList,
-    neighborKey,
-    opposite,
+  BranchKey,
+  branchListKey,
+  Direction,
+  getBranchList,
+  neighborKey,
+  opposite,
 } from "../tabs/utils/graph"
 import { BranchPicker } from "./CreateBranchPicker"
 import CreateDescription from "./CreateDescription"
 import { FlowCard } from "./CreateFlowCard"
 import {
-    createGameSave,
-    loadAutoSave,
-    loadGameSaves,
-    persistAutoSave,
-    persistGameSaves,
-    updateGameSaveNodes,
-    type GameSave,
+  createGameSave,
+  loadAutoSave,
+  loadGameSaves,
+  persistAutoSave,
+  persistGameSaves,
+  updateGameSaveNodes,
+  type GameSave,
 } from "./CreateSystemGameSave"
 
 export type Axis = "x" | "y"
@@ -514,7 +514,7 @@ export default function Index() {
                     title: cleanTitle,
                     notes: cleanNotes || undefined,
                     moveId: node.moveId,
-                    videoUrl: input.mediaType === "video" ? input.mediaUri ?? node.videoUrl : node.videoUrl,
+                    videoUrl: input.mediaType === "video" ? (input.mediaUri ? { uri: input.mediaUri } : node.videoUrl) : node.videoUrl,
                     thumbnail: input.mediaType === "image" ? (input.mediaUri ? { uri: input.mediaUri } : node.thumbnail) : node.thumbnail,
                   },
                 ]
@@ -567,7 +567,7 @@ export default function Index() {
             id: newId,
             title: cleanTitle,
             moveId: undefined,
-            videoUrl: input.mediaType === "video" ? input.mediaUri : undefined,
+            videoUrl: input.mediaType === "video" && input.mediaUri ? { uri: input.mediaUri } : undefined,
             thumbnail: input.mediaType === "image" && input.mediaUri ? { uri: input.mediaUri } : undefined,
             group: undefined,
             type: undefined,
@@ -789,20 +789,6 @@ export default function Index() {
               </BlurView>
             </View>
 
-            <View style={{ overflow: "hidden", borderRadius: 12 }}>
-              <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
-                <Pressable
-                  onPress={() => {
-                    setMenuDirection(null)
-                    setMenuParentId(currentId)
-                    setMenuVisible(true)
-                  }}
-                  style={{ padding: 4, borderRadius: 999 }}
-                >
-                  <MaterialCommunityIcons name="pencil-outline" size={20} color="#f8fafc" />
-                </Pressable>
-              </BlurView>
-            </View>
           </View>
         </View>
 
@@ -837,6 +823,30 @@ export default function Index() {
                   }}
                 >
                   <View style={{ width: cardWidth, height: cardHeight, position: "relative" }}>
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: 10,
+                        right: 10,
+                        zIndex: 12,
+                        elevation: 12,
+                      }}
+                    >
+                      <View style={{ overflow: "hidden", borderRadius: 12 }}>
+                        <BlurView intensity={35} tint="dark" style={{ padding: 6, borderRadius: 12 }}>
+                          <Pressable
+                            onPress={() => {
+                              setMenuDirection(null)
+                              setMenuParentId(currentId)
+                              setMenuVisible(true)
+                            }}
+                            style={{ padding: 4, borderRadius: 999 }}
+                          >
+                            <MaterialCommunityIcons name="pencil-outline" size={20} color="#f8fafc" />
+                          </Pressable>
+                        </BlurView>
+                      </View>
+                    </View>
                     {isRootBlank && (
                       <Pressable
                         onPress={() => openMoveMenu()}
@@ -913,6 +923,8 @@ export default function Index() {
                                 axis={axis}
                                 playingIds={playingIds}
                                 setPlayingIds={setPlayingIds}
+                                isCurrent={id === currentId}
+                                isRoot={id === rootId}
                               />
                             </View>
                           )
