@@ -798,7 +798,7 @@ export default function Index() {
           onGestureEvent={handleGestureEvent}
           onEnded={handleGestureEnd}
         >
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1 }} collapsable={false}>
             <View
               style={{
                 flex: 1,
@@ -806,8 +806,9 @@ export default function Index() {
                 paddingTop: 0,
                 paddingBottom: 16,
               }}
+              collapsable={false}
             >
-              <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+              <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }} collapsable={false}>
                 <Animated.View
                   style={{
                     width: outerWidth,
@@ -821,8 +822,13 @@ export default function Index() {
                     overflow: "visible",
                     transform: stageTransform,
                   }}
+                  collapsable={false}
+                  removeClippedSubviews={false}
                 >
-                  <View style={{ width: cardWidth, height: cardHeight, position: "relative" }}>
+                  <View 
+                    style={{ width: cardWidth, height: cardHeight, position: "relative" }}
+                    collapsable={false}
+                  >
                     <View
                       style={{
                         position: "absolute",

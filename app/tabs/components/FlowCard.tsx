@@ -1,7 +1,6 @@
-﻿import MaterialIcons from "@expo/vector-icons/MaterialIcons"
 import { Video, ResizeMode, type AVPlaybackSource } from "expo-av"
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react"
-import { Animated, Pressable, Text, View, StyleSheet } from "react-native"
+import { Animated, Text, View, StyleSheet } from "react-native"
 import type { Node } from "../../FlowStore"
 
 type Axis = "x" | "y"
@@ -77,7 +76,7 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
                 source={node.videoUrl as AVPlaybackSource}
                 style={{ width: "100%", height: "100%" }}
                 resizeMode={ResizeMode.CONTAIN}
-                useNativeControls={isPlaying}
+                useNativeControls={true}
                 shouldPlay={isPlaying}
                 isMuted={!isPlaying}
                 usePoster={!!node.thumbnail}
@@ -88,40 +87,23 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
                 }}
                 onPlaybackStatusUpdate={(status) => {
                   if (!status.isLoaded) return
-                  if (status.didJustFinish) {
-                    setPlayingIds((prev) => {
-                      const next = { ...prev }
+                  const shouldBePlaying =
+                    (status.shouldPlay ?? status.isPlaying) && !status.didJustFinish
+                  setPlayingIds((prev) => {
+                    const isPlayingNow = Boolean(prev[node.id])
+                    if (shouldBePlaying === isPlayingNow) return prev
+                    const next = { ...prev }
+                    if (shouldBePlaying) {
+                      next[node.id] = true
+                    } else {
                       delete next[node.id]
-                      return next
-                    })
-                  }
+                    }
+                    return next
+                  })
                 }}
               />
             </Animated.View>
 
-            {/* Play overlay when not playing */}
-            {!isPlaying && (
-              <Pressable
-                onPress={() =>
-                  setPlayingIds((prev) => ({
-                    ...prev,
-                    [node.id]: true,
-                  }))
-                }
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: "rgba(0,0,0,0.25)",
-                }}
-              >
-                <MaterialIcons name="play-circle-fill" size={56} color="#f97316" />
-              </Pressable>
-            )}
           </>
         )}
       </View>

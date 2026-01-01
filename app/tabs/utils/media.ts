@@ -1,11 +1,3 @@
-export const disableScrollJS = `
-  (function() {
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
-  })();
-  true;
-`
-
 export const extractYouTubeId = (raw?: string | null) => {
   if (!raw) return null
   if (/^[a-zA-Z0-9_-]{6,}$/.test(raw) && !raw.includes("/")) return raw

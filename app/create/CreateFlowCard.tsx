@@ -1,7 +1,6 @@
-import MaterialIcons from "@expo/vector-icons/MaterialIcons"
-import { Video, ResizeMode, type AVPlaybackSource } from "expo-av"
+import { ResizeMode, Video, VideoRef, type AVPlaybackSource } from "expo-av"
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { Animated, Pressable, Text, View, StyleSheet, Image } from "react-native"
+import { Animated, Image, Platform, StyleSheet, Text, View } from "react-native"
 import type { Node } from "../../FlowStore"
 
 type Axis = "x" | "y"
@@ -73,7 +72,18 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
       })
 
       setVideoReady(false)
-      videoOpacity.setValue(0)
+      // On iOS, don't reset opacity to prevent flickering - it will be set when ready
+      if (Platform.OS !== 'ios') {
+        videoOpacity.setValue(0)
+      }
+    } else if (isFirstRender && hasVideo) {
+      // On first mount with video, start with opacity based on platform
+      if (Platform.OS !== 'ios') {
+        videoOpacity.setValue(0)
+      } else {
+        // On iOS, start with opacity 1 to prevent flicker - video will show immediately when ready
+        videoOpacity.setValue(1)
+      }
     }
     
     // Update refs after checking
@@ -81,14 +91,21 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
     prevVideoUrlStringRef.current = videoUrlString
   }, [node.id, videoUrlString, isCurrent, isRoot, hasVideo, setPlayingIds, videoOpacity])
 
-  // Fade in once the native video reports it's ready
+  // On iOS, skip opacity animation to prevent flickering - just show video immediately
   useEffect(() => {
     if (!videoReady) return
-    Animated.timing(videoOpacity, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start()
+    
+    if (Platform.OS === 'ios') {
+      // On iOS, set opacity immediately without animation to prevent flickering
+      videoOpacity.setValue(1)
+    } else {
+      // On Android, use animation
+      Animated.timing(videoOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start()
+    }
     
     // Auto-play after video is ready if we flagged it for auto-play
     if (shouldAutoPlayAfterResetRef.current) {
@@ -121,6 +138,19 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
     }
   }, [isCurrent, hasVideo, node.id, setPlayingIds])
 
+  const videoRef = useRef<VideoRef>(null)
+
+  // Control playback via ref instead of props for iOS
+  useEffect(() => {
+    if (!hasVideo || !videoRef.current) return
+    
+    if (isPlaying) {
+      videoRef.current.playAsync()
+    } else {
+      videoRef.current.pauseAsync()
+    }
+  }, [isPlaying, hasVideo])
+
   return (
     <View
       style={{
@@ -147,58 +177,88 @@ export function FlowCard({ node, cardWidth, cardHeight, playingIds, setPlayingId
           <>
             <View style={[StyleSheet.absoluteFill, { backgroundColor: "#000" }]} />
 
-            <Animated.View style={{ flex: 1, opacity: videoOpacity }}>
-              {videoSource && (
-                <Video
-                  key={videoUrlString || node.id}
-                  source={videoSource}
-                  style={{ width: "100%", height: "100%" }}
-                  resizeMode={ResizeMode.CONTAIN}
-                  useNativeControls={isPlaying}
-                  shouldPlay={isPlaying}
-                  isMuted={false}
-                  usePoster={!!node.thumbnail}
-                  posterSource={node.thumbnail as any}
-                  posterStyle={{ width: "100%", height: "100%", resizeMode: "cover" }}
-                  onReadyForDisplay={() => {
-                    setVideoReady(true)
-                  }}
-                  onPlaybackStatusUpdate={(status) => {
-                    if (!status.isLoaded) return
-                    if (status.didJustFinish) {
+            {Platform.OS === 'ios' ? (
+              <View style={{ flex: 1, opacity: isCurrent ? 1 : 0 }}>
+                {videoSource && (
+                  <Video
+                    ref={videoRef}
+                    key={videoUrlString || node.id}
+                    source={videoSource}
+                    style={{ width: "100%", height: "100%" }}
+                    resizeMode={ResizeMode.CONTAIN}
+                    useNativeControls={true}
+                    shouldPlay={isPlaying}
+                    isMuted={!isCurrent || !isPlaying} // Control via muting instead
+                    usePoster={!!node.thumbnail}
+                    posterSource={node.thumbnail as any}
+                    posterStyle={{ width: "100%", height: "100%", resizeMode: "cover" }}
+                    onReadyForDisplay={() => {
+                      setVideoReady(true)
+                    }}
+                    onPlaybackStatusUpdate={(status) => {
+                      if (!status.isLoaded) return
+                      const shouldBePlaying =
+                        (status.shouldPlay ?? status.isPlaying) && !status.didJustFinish
                       setPlayingIds((prev) => {
+                        const isPlayingNow = Boolean(prev[node.id])
+                        if (shouldBePlaying === isPlayingNow) return prev
                         const next = { ...prev }
-                        delete next[node.id]
+                        if (shouldBePlaying) {
+                          next[node.id] = true
+                        } else {
+                          delete next[node.id]
+                        }
                         return next
                       })
-                    }
-                  }}
-                />
-              )}
-            </Animated.View>
-
-            {!isPlaying && (
-              <Pressable
-                onPress={() =>
-                  setPlayingIds((prev) => ({
-                    ...prev,
-                    [node.id]: true,
-                  }))
-                }
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  bottom: 0,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: "rgba(0,0,0,0.25)",
-                }}
-              >
-                <MaterialIcons name="play-circle-fill" size={56} color="#f97316" />
-              </Pressable>
+                    }}
+                  />
+                )}
+              </View>
+            ) : (
+              <Animated.View style={{ flex: 1, opacity: videoOpacity }}>
+                {videoSource && (
+                  <Video
+                    key={videoUrlString || node.id}
+                    source={videoSource}
+                    style={{ width: "100%", height: "100%" }}
+                    resizeMode={ResizeMode.CONTAIN}
+                    useNativeControls={true}
+                    shouldPlay={isPlaying}
+                    isMuted={!isPlaying}
+                    usePoster={!!node.thumbnail}
+                    posterSource={node.thumbnail as any}
+                    posterStyle={{ width: "100%", height: "100%", resizeMode: "cover" }}
+                    onReadyForDisplay={() => {
+                      setVideoReady(true)
+                    }}
+                    onPlaybackStatusUpdate={(status) => {
+                      if (!status.isLoaded) return
+                      const shouldBePlaying =
+                        (status.shouldPlay ?? status.isPlaying) && !status.didJustFinish
+                      setPlayingIds((prev) => {
+                        const isPlayingNow = Boolean(prev[node.id])
+                        if (shouldBePlaying === isPlayingNow) return prev
+                        const next = { ...prev }
+                        if (shouldBePlaying) {
+                          next[node.id] = true
+                        } else {
+                          delete next[node.id]
+                        }
+                        return next
+                      })
+                    }}
+                  />
+                )}
+              </Animated.View>
             )}
+            
+            {/* Show native controls overlay when playing on iOS */}
+            {Platform.OS === 'ios' && isPlaying && (
+              <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 44, pointerEvents: 'none' }}>
+                {/* You might want to add custom controls here if needed */}
+              </View>
+            )}
+
           </>
         ) : (
           <Image
