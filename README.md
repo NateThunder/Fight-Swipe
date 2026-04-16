@@ -1,50 +1,88 @@
-# Welcome to your Expo app 👋
+# Fight Swipe
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Fight Swipe is an Expo + React Native app for drilling Brazilian Jiu-Jitsu (BJJ) decision trees.  
+You can build or load a flow chart, then swipe through connected moves to practice transitions, options, and submissions.
 
-## Get started
+## What the app does
 
-1. Install dependencies
+- **Flow-based training:** Navigate your technique graph by swiping left/right/up/down between connected nodes.
+- **Built-in BJJ move data:** Seed flows from predefined move relationships.
+- **Saved flow charts:** Create, open, autosave, and delete game/flow saves.
+- **Overview map:** Visual graph view with pan + pinch zoom to inspect your full flow.
+- **Create mode:** Build your own custom flow chart structure.
+- **Technique media support:** Nodes can reference local video/image content.
 
-   ```bash
-   npm install
-   ```
+## Tech stack
 
-2. Start the app
+- **Expo SDK 54**
+- **React Native 0.81 / React 19**
+- **Expo Router** for navigation
+- **React Native Gesture Handler** for swipe/pan/pinch interactions
+- **React Native Paper** for UI elements
 
-   ```bash
-   npx expo start
-   ```
+## Project structure
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+app/
+  _layout.tsx                  # Root tabs/navigation shell + providers
+  index.tsx                    # Redirects root route to /tabs
+  tabs/
+    index.tsx                  # Main Fight Swipe training screen
+    overview.tsx               # Graph overview canvas
+    components/                # Shared tab UI pieces
+    utils/                     # Graph/media helpers
+  create/
+    CreateSystem.tsx           # Create mode interaction screen
+    CreateSystemLobby.tsx      # Create mode lobby
+  components/
+    HamburgerMenu.tsx          # App-wide drawer menu
+  BjjData.ts                   # Technique nodes/edges seed data
+  FlowStore.tsx                # Global flow state
+  gameSaves.ts                 # Save/autosave persistence helpers
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Getting started
 
-## Learn more
+### 1) Install dependencies
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+npm install
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### 2) Run the app
 
-## Join the community
+```bash
+npm run start
+```
 
-Join our community of developers creating universal apps.
+Then launch on your target platform from Expo:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+- Android emulator/device (`a` in Expo CLI, or `npm run android`)
+- iOS simulator/device (`i` in Expo CLI, or `npm run ios`)
+- Web (`w` in Expo CLI, or `npm run web`)
+
+## Available scripts
+
+- `npm run start` – Start Expo dev server
+- `npm run android` – Start with Android target
+- `npm run ios` – Start with iOS target
+- `npm run web` – Start with Web target
+- `npm run lint` – Run Expo lint checks
+- `npm run reset-project` – Reset app scaffolding (from Expo template workflow)
+
+## Core user flows
+
+1. Open the app and enter **Fight Flow**.
+2. Create or open a flow chart from the **Lobby**.
+3. Swipe between connected nodes to train transitions.
+4. Open **Overview** to see the full branching structure.
+5. Use **Create** to build/edit a custom sequence tree.
+
+## Notes
+
+- This repository currently includes placeholder screens for **Explore** and **Settings** while those sections are being expanded.
+- Local media assets live under `assets/Move Videos` and can be mapped to technique nodes.
+
+---
+
+If you’re contributing, please keep this README updated whenever routes, major features, or setup steps change.
